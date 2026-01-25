@@ -1,5 +1,8 @@
 <script lang="ts">
-    type RSVPStep = "name" | "email" | "guests" | "complete";
+    import { verifyName, submitRSVP } from '$lib/api';
+    import type { RSVPRequest } from '$lib/api';
+
+    type RSVPStep = "name" | "email" | "attending" | "guests" | "complete";
 
     interface Guest {
         id: string;
@@ -10,53 +13,31 @@
     let step = $state<RSVPStep>("name");
     let nameInput = $state("");
     let emailInput = $state("");
+    let dietaryRequirements = $state("");
+    let isAttending = $state(true);
     let isVerified = $state(false);
     let isLoading = $state(false);
     let errorMessage = $state("");
     let guests = $state<Guest[]>([]);
+    let verifiedName = $state(""); // Store the verified name
 
-    // Demo guest list - in production this would come from the backend
-    const guestList = [
-        {
-            id: "1",
-            name: "John Smith",
-            allowedGuests: ["John Smith", "Jane Smith"],
-        },
-        {
-            id: "2",
-            name: "Jane Smith",
-            allowedGuests: ["John Smith", "Jane Smith"],
-        },
-        { id: "3", name: "Bob Johnson", allowedGuests: ["Bob Johnson"] },
-        {
-            id: "4",
-            name: "Alice Williams",
-            allowedGuests: ["Alice Williams", "Tom Williams"],
-        },
-    ];
-
-    async function verifyName() {
+    async function handleVerifyName() {
         isLoading = true;
         errorMessage = "";
 
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 800));
-
-        const foundGuest = guestList.find(
-            (g) => g.name.toLowerCase() === nameInput.toLowerCase(),
-        );
-
-        if (foundGuest) {
-            isVerified = true;
-            guests = foundGuest.allowedGuests.map((name, index) => ({
-                id: `guest-${index}`,
-                name,
-                attending: true,
-            }));
-            step = "email";
-        } else {
-            errorMessage =
-                "Name not found on the guest list. Please check the spelling or contact us.";
+        try {
+            const response = await verifyName(nameInput.trim());
+            
+            if (response.success) {
+                isVerified = true;
+                verifiedName = nameInput.trim();
+                step = "email";
+            } else {
+                errorMessage = response.message || "Name not found on the guest list. Please check the spelling or contact us.";
+            }
+        } catch (error) {
+            errorMessage = "Unable to verify name. Please try again.";
+            console.error("Verify name error:", error);
         }
 
         isLoading = false;
@@ -74,9 +55,49 @@
             return;
         }
 
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        step = "guests";
+        step = "attending";
         isLoading = false;
+    }
+
+    function selectAttending(attending: boolean) {
+        isAttending = attending;
+        if (attending) {
+            // If attending, ask for guest selection
+            // Initialize with the verified name as the first guest
+            guests = [
+                {
+                    id: 'guest-0',
+                    name: verifiedName,
+                    attending: true
+                }
+            ];
+            step = "guests";
+        } else {
+            // If not attending, skip directly to submission
+            handleSubmitRSVP();
+        }
+    }
+
+    function addGuest() {
+        const newGuestName = prompt("Enter guest name:");
+        if (newGuestName && newGuestName.trim()) {
+            guests = [
+                ...guests,
+                {
+                    id: `guest-${guests.length}`,
+                    name: newGuestName.trim(),
+                    attending: true
+                }
+            ];
+        }
+    }
+
+    function removeGuest(guestId: string) {
+        // Don't allow removing the first guest (the person who initiated RSVP)
+        if (guestId === 'guest-0') {
+            return;
+        }
+        guests = guests.filter((g) => g.id !== guestId);
     }
 
     function toggleGuest(guestId: string) {
@@ -85,20 +106,35 @@
         );
     }
 
-    async function submitRSVP() {
+    async function handleSubmitRSVP() {
         isLoading = true;
         errorMessage = "";
 
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        try {
+            const attendingGuestNames = guests
+                .filter((g) => g.attending)
+                .map((g) => g.name);
 
-        // In production, this would send data to the backend
-        console.log("RSVP submitted:", {
-            email: emailInput,
-            guests: guests.filter((g) => g.attending),
-        });
+            const rsvpData: RSVPRequest = {
+                name: verifiedName,
+                email: emailInput.trim(),
+                isAttending,
+                attendingGuests: isAttending ? attendingGuestNames : [],
+                diet: isAttending && dietaryRequirements.trim() ? dietaryRequirements.trim() : undefined,
+            };
 
-        step = "complete";
+            const response = await submitRSVP(rsvpData);
+
+            if (response.success) {
+                step = "complete";
+            } else {
+                errorMessage = response.message || "Failed to submit RSVP. Please try again.";
+            }
+        } catch (error: any) {
+            errorMessage = error.message || "Unable to submit RSVP. Please try again.";
+            console.error("Submit RSVP error:", error);
+        }
+
         isLoading = false;
     }
 
@@ -130,7 +166,7 @@
                     id="name"
                     bind:value={nameInput}
                     placeholder="Enter your full name"
-                    onkeypress={(e) => handleKeyPress(e, verifyName)}
+                    onkeypress={(e) => handleKeyPress(e, handleVerifyName)}
                     disabled={isLoading}
                 />
             </div>
@@ -139,7 +175,7 @@
             {/if}
             <button
                 class="btn btn-primary"
-                onclick={verifyName}
+                onclick={handleVerifyName}
                 disabled={isLoading || !nameInput.trim()}
             >
                 {#if isLoading}
@@ -192,18 +228,61 @@
                 </button>
             </div>
         </div>
+    {:else if step === "attending"}
+        <div class="form-step">
+            <p class="instruction">Will you be attending?</p>
+            <div class="attending-choice">
+                <button
+                    class="choice-btn"
+                    onclick={() => selectAttending(true)}
+                    disabled={isLoading}
+                >
+                    <img src="/confirm.png" alt="Yes" class="choice-icon" />
+                    <span>Yes, I'll be there!</span>
+                </button>
+                <button
+                    class="choice-btn"
+                    onclick={() => selectAttending(false)}
+                    disabled={isLoading}
+                >
+                    <img src="/cancel.png" alt="No" class="choice-icon" />
+                    <span>Sorry, can't make it</span>
+                </button>
+            </div>
+            {#if errorMessage}
+                <p class="error">{errorMessage}</p>
+            {/if}
+            <button
+                class="btn btn-outline"
+                onclick={() => (step = "email")}
+                disabled={isLoading}
+            >
+                Back
+            </button>
+        </div>
     {:else if step === "guests"}
         <div class="form-step">
             <p class="instruction">Who will be attending?</p>
             <div class="guests-list">
                 {#each guests as guest (guest.id)}
-                    <label class="guest-item" class:attending={guest.attending}>
-                        <input
-                            type="checkbox"
-                            checked={guest.attending}
-                            onchange={() => toggleGuest(guest.id)}
-                        />
-                        <span class="guest-name">{guest.name}</span>
+                    <div class="guest-item" class:attending={guest.attending}>
+                        <label class="guest-checkbox">
+                            <input
+                                type="checkbox"
+                                checked={guest.attending}
+                                onchange={() => toggleGuest(guest.id)}
+                            />
+                            <span class="guest-name">{guest.name}</span>
+                        </label>
+                        {#if guest.id !== 'guest-0'}
+                            <button
+                                class="btn-remove"
+                                onclick={() => removeGuest(guest.id)}
+                                title="Remove guest"
+                            >
+                                ×
+                            </button>
+                        {/if}
                         <span class="status">
                             {#if guest.attending}
                                 <img
@@ -219,24 +298,40 @@
                                 />
                             {/if}
                         </span>
-                    </label>
+                    </div>
                 {/each}
             </div>
+            <button class="btn btn-outline" onclick={addGuest} type="button">
+                + Add Another Guest
+            </button>
+
+            <div class="input-group">
+                <label for="diet">Dietary Requirements (Optional)</label>
+                <textarea
+                    id="diet"
+                    bind:value={dietaryRequirements}
+                    placeholder="Any allergies or dietary restrictions?"
+                    rows="3"
+                    disabled={isLoading}
+                ></textarea>
+                <p class="helper-text">Let us know about any dietary needs for your party</p>
+            </div>
+
             {#if errorMessage}
                 <p class="error">{errorMessage}</p>
             {/if}
             <div class="button-group">
                 <button
                     class="btn btn-outline"
-                    onclick={() => (step = "email")}
+                    onclick={() => (step = "attending")}
                     disabled={isLoading}
                 >
                     Back
                 </button>
                 <button
                     class="btn btn-primary"
-                    onclick={submitRSVP}
-                    disabled={isLoading}
+                    onclick={handleSubmitRSVP}
+                    disabled={isLoading || guests.filter(g => g.attending).length === 0}
                 >
                     {#if isLoading}
                         Submitting...
@@ -273,6 +368,11 @@
         <span
             class="dot"
             class:active={step === "email"}
+            class:completed={step === "attending" || step === "guests" || step === "complete"}
+        ></span>
+        <span
+            class="dot"
+            class:active={step === "attending"}
             class:completed={step === "guests" || step === "complete"}
         ></span>
         <span
@@ -334,6 +434,22 @@
         gap: var(--spacing-xs);
     }
 
+    .input-group textarea {
+        width: 100%;
+        padding: var(--spacing-sm);
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        font-family: inherit;
+        font-size: 1rem;
+        resize: vertical;
+    }
+
+    .helper-text {
+        font-size: 0.75rem;
+        color: var(--color-text-light);
+        margin-top: -4px;
+    }
+
     .error {
         color: var(--color-text);
         font-size: 0.875rem;
@@ -354,6 +470,38 @@
         object-fit: contain;
     }
 
+    .attending-choice {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-md);
+    }
+
+    .choice-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: var(--spacing-md);
+        padding: var(--spacing-lg);
+        background: var(--color-white);
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        font-size: 1.1rem;
+        font-weight: 500;
+    }
+
+    .choice-btn:hover {
+        border-color: var(--color-text);
+        background: var(--color-background-alt);
+    }
+
+    .choice-icon {
+        width: 32px;
+        height: 32px;
+        object-fit: contain;
+    }
+
     .guests-list {
         display: flex;
         flex-direction: column;
@@ -367,13 +515,8 @@
         padding: var(--spacing-md);
         background: var(--color-white);
         border-radius: var(--radius-md);
-        cursor: pointer;
         transition: all var(--transition-fast);
         border: 2px solid var(--color-border-light);
-    }
-
-    .guest-item:hover {
-        border-color: var(--color-border);
     }
 
     .guest-item.attending {
@@ -381,7 +524,15 @@
         background: var(--color-background-alt);
     }
 
-    .guest-item input[type="checkbox"] {
+    .guest-checkbox {
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+        flex: 1;
+        cursor: pointer;
+    }
+
+    .guest-checkbox input[type="checkbox"] {
         width: 20px;
         height: 20px;
         cursor: pointer;
@@ -389,8 +540,26 @@
     }
 
     .guest-name {
-        flex: 1;
         font-weight: 500;
+    }
+
+    .btn-remove {
+        background: none;
+        border: none;
+        font-size: 1.5rem;
+        color: var(--color-text-light);
+        cursor: pointer;
+        padding: 0;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: color var(--transition-fast);
+    }
+
+    .btn-remove:hover {
+        color: var(--color-text);
     }
 
     .status-icon {
