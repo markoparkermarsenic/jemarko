@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/markoparkermarsenic/jemarko/api/shared"
+	"api/shared"
 )
 
 // Handler handles name verification requests

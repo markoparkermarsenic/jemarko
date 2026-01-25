@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/markoparkermarsenic/jemarko/api/shared"
+	"api/shared"
 )
 
 // Handler handles health check requests

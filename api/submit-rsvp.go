@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/markoparkermarsenic/jemarko/api/shared"
+	"api/shared"
 )
 
 // Handler handles RSVP submission requests
