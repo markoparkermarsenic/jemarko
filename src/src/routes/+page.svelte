@@ -1,20 +1,18 @@
 <script lang="ts">
-    import { AvatarPlaza, AvatarSelection } from "$lib/components";
+    import { AvatarPlaza, AvatarSelection, RSVPForm } from "$lib/components";
 
     type AppView = "rsvp" | "avatar-selection" | "plaza-only";
 
     let currentView = $state<AppView>("rsvp");
     let rsvpGuests = $state<string[]>([]);
-    let guestName = $state("");
 
     // Check if RSVP deadline has passed (August 1st, 2026)
     const rsvpDeadline = new Date("2026-08-01T00:00:00");
     const isRsvpClosed = $derived(new Date() >= rsvpDeadline);
 
     function handleRSVPComplete() {
-        // For demo, use some sample guest names
-        // In production, this would come from the RSVP form
-        rsvpGuests = ["John Smith", "Jane Smith"];
+        // This will be called after successful RSVP submission
+        // Guest names will be set before this is called
         currentView = "avatar-selection";
     }
 
@@ -38,30 +36,7 @@
     <div class="content-overlay">
         {#if currentView === "rsvp" && !isRsvpClosed}
             <div class="content-wrapper animate-fadeIn">
-                <div class="invite-container">
-                    <img
-                        src="/invite-with-rsvp-box.png"
-                        alt="Wedding Invitation - RSVP"
-                        class="invite-image"
-                    />
-                    <input
-                        type="text"
-                        bind:value={guestName}
-                        placeholder="Enter your name"
-                        class="name-input-overlay"
-                    />
-                    <div class="rsvp-buttons">
-                        <button
-                            class="rsvp-btn yes-btn"
-                            on:click={handleRSVPComplete}
-                        >
-                            Yes
-                        </button>
-                        <button class="rsvp-btn no-btn" on:click={() => {}}>
-                            No
-                        </button>
-                    </div>
-                </div>
+                <RSVPForm oncomplete={handleRSVPComplete} />
             </div>
         {:else if currentView === "avatar-selection"}
             <div class="content-wrapper animate-fadeIn">
