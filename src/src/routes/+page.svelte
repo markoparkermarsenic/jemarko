@@ -206,6 +206,8 @@
         padding: var(--spacing-xl) var(--spacing-2xl);
         border-radius: var(--radius-lg);
         border: 2px solid var(--color-border);
+        position: relative;
+        z-index: 1;
     }
 
     .plaza-header h1 {

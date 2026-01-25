@@ -23,7 +23,76 @@ this is a wedding website that allows users to rsvp; once they have rsvpd the wi
 
 ## Tech stack 
 - Frontend: Svelte (Vercel)
-- Backend: Go (Vercel Functions) 
+- Backend: Go (Vercel Serverless Functions) 
 - Database: Supabase 
 - Email: Resend 
 - Domain: Cloudflare
+
+## Project Structure
+
+```
+jemarko/
+├── src/                    # SvelteKit frontend
+│   ├── routes/            # Pages and routes
+│   └── lib/               # Components and utilities
+├── api/                   # Go serverless functions
+│   ├── health.go          # Health check endpoint
+│   ├── verify-name.go     # Guest name verification
+│   ├── submit-rsvp.go     # RSVP submission
+│   └── shared/            # Shared utilities
+│       ├── types.go       # Type definitions
+│       ├── database.go    # Supabase integration
+│       ├── email.go       # Email service (Resend)
+│       └── utils.go       # Helper functions
+├── vercel.json            # Vercel deployment config
+└── DEPLOYMENT.md          # Comprehensive deployment guide
+```
+
+## Deployment
+
+This project is optimized for Vercel deployment with:
+- **No Docker required** - Uses Vercel's native Go and Node.js runtimes
+- **Serverless architecture** - Auto-scales and costs nothing when idle
+- **Global CDN** - Frontend served from edge locations worldwide
+- **Supabase integration** - PostgreSQL database with REST API
+
+📚 **See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete deployment instructions**
+
+### Quick Deploy
+
+1. Push to GitHub
+2. Import to Vercel from GitHub
+3. Add environment variables in Vercel dashboard
+4. Deploy automatically
+
+## Development
+
+### Local Development with Vercel
+
+```bash
+# Install Vercel CLI
+npm i -g vercel
+
+# Run locally (simulates Vercel environment)
+vercel dev
+```
+
+### Frontend Only
+
+```bash
+cd src
+npm install
+npm run dev
+```
+
+## Environment Variables
+
+Required for production:
+- `SUPABASE_URL` - Your Supabase project URL
+- `SUPABASE_API_KEY` - Your Supabase API key
+- `RESEND_API_KEY` - Your Resend API key
+- `FROM_EMAIL` - Sender email address
+- `FROM_NAME` - Sender name
+- `ADMIN_EMAIL` - Admin email for notifications
+
+See `.env.example` files for details.
