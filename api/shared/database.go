@@ -22,6 +22,7 @@ type Database struct {
 type GuestRecord struct {
 	ID        string `json:"id,omitempty"`
 	Name      string `json:"name"`
+	Address   string `json:"address"` // Removed omitempty - always include
 	CreatedAt string `json:"created_at,omitempty"`
 	Dietary   string `json:"dietary,omitempty"`
 }
@@ -73,15 +74,7 @@ func (db *Database) LoadGuests() ([]Guest, error) {
 
 	// Load from database
 	if !db.IsConfigured() {
-		log.Println("⚠️  Supabase not configured - using in-memory guest list")
-		guests := getDefaultGuestList()
-
-		// Cache the result
-		guestListMutex.Lock()
-		guestListCache = guests
-		guestListMutex.Unlock()
-
-		return guests, nil
+		return nil, fmt.Errorf("Supabase not configured - please check SUPABASE_URL and SUPABASE_API_KEY in api/.env")
 	}
 
 	url := fmt.Sprintf("%s/rest/v1/guests?select=*", db.url)
@@ -114,8 +107,9 @@ func (db *Database) LoadGuests() ([]Guest, error) {
 	guests := make([]Guest, len(records))
 	for i, record := range records {
 		guests[i] = Guest{
-			ID:   record.ID,
-			Name: record.Name,
+			ID:      record.ID,
+			Name:    record.Name,
+			Address: record.Address,
 		}
 	}
 
@@ -131,10 +125,9 @@ func (db *Database) LoadGuests() ([]Guest, error) {
 // SaveRSVP saves an RSVP submission to Supabase
 func (db *Database) SaveRSVP(rsvp RSVPRequest) error {
 	if !db.IsConfigured() {
-		log.Printf("⚠️  Supabase not configured - RSVP logged to console only")
+		log.Printf("⚠️  Supabase not configured")
 		log.Printf("RSVP: %s (%s) - Attending: %v - Guests: %v - Diet: %s",
 			rsvp.Name, rsvp.Email, rsvp.IsAttending, rsvp.AttendingGuests, rsvp.Diet)
-		return nil
 	}
 
 	record := RSVPRecord{
@@ -177,13 +170,20 @@ func (db *Database) SaveRSVP(rsvp RSVPRequest) error {
 	return nil
 }
 
+// ClearCache clears the guest list cache
+func (db *Database) ClearCache() {
+	guestListMutex.Lock()
+	guestListCache = []Guest{}
+	guestListMutex.Unlock()
+}
+
 // getDefaultGuestList returns a default guest list for development
 func getDefaultGuestList() []Guest {
 	return []Guest{
-		{ID: "1", Name: "John Smith"},
-		{ID: "2", Name: "Jane Smith"},
-		{ID: "3", Name: "Bob Johnson"},
-		{ID: "4", Name: "Alice Williams"},
-		{ID: "5", Name: "Tom Williams"},
+		{ID: "1", Name: "John Smith", Address: "123 Main St, London"},
+		{ID: "2", Name: "Jane Smith", Address: "123 Main St, London"},
+		{ID: "3", Name: "Bob Johnson", Address: "456 Oak Ave, Manchester"},
+		{ID: "4", Name: "Alice Williams", Address: "789 Elm Road, Birmingham"},
+		{ID: "5", Name: "Tom Williams", Address: "789 Elm Road, Birmingham"},
 	}
 }

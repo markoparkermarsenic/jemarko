@@ -1,10 +1,18 @@
 /* Global styles for Jemarko Wedding - Black & White Theme */
 @import url('https://fonts.googleapis.com/css2?family=Caveat:wght@400;500;600;700&family=Inter:wght@300;400;500;600&display=swap');
 
-/* Custom Mimko Font */
+/* Custom Fonts */
 @font-face {
-    font-family: 'Mimko';
-    src: url('/Mimko-Regular.ttf') format('truetype');
+    font-family: 'Diplomata';
+    src: url('/DiplomataSC-Regular.ttf') format('truetype');
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Coustard';
+    src: url('/Coustard-Regular.ttf') format('truetype');
     font-weight: normal;
     font-style: normal;
     font-display: swap;
@@ -26,9 +34,11 @@
     --color-success: #000000;
 
     /* Typography */
-    --font-display: 'Mimko', 'Caveat', cursive;
-    --font-body: 'Inter', sans-serif;
-    --font-mimko: 'Mimko', cursive;
+    --font-display: 'Coustard', 'Caveat', monospace;
+    --font-body: 'Courier New', monospace;
+    --font-mimko: 'Coustard', monospace;
+    --font-diplomata: 'Diplomata', serif;
+    --font-loud: 'Diplomata', serif;
 
     /* Spacing */
     --spacing-xs: 0.25rem;
@@ -99,6 +109,7 @@ h1 {
 
 h2 {
     font-size: 2.25rem;
+    font-family: var(--font-loud);
 }
 
 h3 {
@@ -189,7 +200,7 @@ input,
 textarea,
 select {
     font-family: var(--font-body);
-    font-size: 1rem;
+    font-size: 0.6rem;
     padding: var(--spacing-sm) var(--spacing-md);
     border: 2px solid var(--color-border);
     border-radius: var(--radius-md);

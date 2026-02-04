@@ -1,42 +1,24 @@
 package shared
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/resend/resend-go/v3"
 )
 
 // EmailService handles sending emails via Resend
 type EmailService struct {
-	apiKey    string
+	client    *resend.Client
 	fromEmail string
 	fromName  string
+	isEnabled bool
 }
 
-// ResendEmailRequest represents the Resend API request payload
-type ResendEmailRequest struct {
-	From    string   `json:"from"`
-	To      []string `json:"to"`
-	Subject string   `json:"subject"`
-	Text    string   `json:"text,omitempty"`
-	HTML    string   `json:"html,omitempty"`
-}
-
-// ResendEmailResponse represents the Resend API response
-type ResendEmailResponse struct {
-	ID    string `json:"id"`
-	Error struct {
-		Message string `json:"message"`
-		Name    string `json:"name"`
-	} `json:"error,omitempty"`
-}
-
-// NewEmailService creates a new email service instance using Resend
+// NewEmailService creates a new email service instance using Resend SDK
 func NewEmailService() *EmailService {
 	apiKey := os.Getenv("RESEND_API_KEY")
 	fromEmail := os.Getenv("FROM_EMAIL")
@@ -50,17 +32,25 @@ func NewEmailService() *EmailService {
 		fromEmail = "wedding@jemarko.com"
 	}
 
+	var client *resend.Client
+	isEnabled := apiKey != ""
+
+	if isEnabled {
+		client = resend.NewClient(apiKey)
+	}
+
 	return &EmailService{
-		apiKey:    apiKey,
+		client:    client,
 		fromEmail: fromEmail,
 		fromName:  fromName,
+		isEnabled: isEnabled,
 	}
 }
 
-// SendEmail sends an email using Resend API
+// SendEmail sends an email using Resend SDK
 func (es *EmailService) SendEmail(to, subject, body string) error {
 	// If no API key is configured, log to console instead
-	if es.apiKey == "" {
+	if !es.isEnabled {
 		log.Println("⚠️  RESEND_API_KEY not configured - logging email to console instead")
 		return es.logEmailToConsole(to, subject, body)
 	}
@@ -71,52 +61,22 @@ func (es *EmailService) SendEmail(to, subject, body string) error {
 	// Create HTML version of the email
 	htmlBody := strings.ReplaceAll(body, "\n", "<br>")
 
-	// Prepare request payload
-	payload := ResendEmailRequest{
+	// Prepare email params using Resend SDK
+	params := &resend.SendEmailRequest{
 		From:    from,
 		To:      []string{to},
 		Subject: subject,
 		Text:    body,
-		HTML:    fmt.Sprintf("<div style='font-family: sans-serif;'>%s</div>", htmlBody),
+		Html:    fmt.Sprintf("<div style='font-family: sans-serif;'>%s</div>", htmlBody),
 	}
 
-	jsonData, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("failed to marshal email request: %v", err)
-	}
-
-	// Create HTTP request to Resend API
-	req, err := http.NewRequest("POST", "https://api.resend.com/emails", bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("failed to create request: %v", err)
-	}
-
-	req.Header.Set("Authorization", "Bearer "+es.apiKey)
-	req.Header.Set("Content-Type", "application/json")
-
-	// Send request
-	client := &http.Client{Timeout: 10 * time.Second}
-	resp, err := client.Do(req)
+	// Send email using Resend SDK
+	sent, err := es.client.Emails.Send(params)
 	if err != nil {
 		return fmt.Errorf("failed to send email via Resend: %v", err)
 	}
-	defer resp.Body.Close()
 
-	// Parse response
-	var resendResp ResendEmailResponse
-	if err := json.NewDecoder(resp.Body).Decode(&resendResp); err != nil {
-		return fmt.Errorf("failed to decode Resend response: %v", err)
-	}
-
-	// Check for errors
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		if resendResp.Error.Message != "" {
-			return fmt.Errorf("Resend API error: %s", resendResp.Error.Message)
-		}
-		return fmt.Errorf("Resend API returned status %d", resp.StatusCode)
-	}
-
-	log.Printf("✓ Email sent successfully to %s (Resend ID: %s)", to, resendResp.ID)
+	log.Printf("✓ Email sent successfully to %s (Resend ID: %s)", to, sent.Id)
 	return nil
 }
 

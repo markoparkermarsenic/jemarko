@@ -1,4 +1,7 @@
 <script lang="ts">
+    import { saveAvatars } from '$lib/api';
+    import type { AvatarSelection as AvatarSelectionType } from '$lib/api';
+
     interface AvatarOption {
         id: string;
         image: string;
@@ -9,68 +12,103 @@
         guestName: string;
         selectedAvatar: string | null;
         message: string;
+        isDropdownOpen: boolean;
+    }
+
+    // Define the type for completed avatar data
+    interface CompletedAvatar {
+        name: string;
+        avatar: string;
+        message: string;
     }
 
     let {
         guests = ["Guest"],
+        email = "",
         oncomplete,
-    }: { guests?: string[]; oncomplete?: () => void } = $props();
+    }: { guests?: string[]; email?: string; oncomplete?: (avatars: CompletedAvatar[]) => void } = $props();
 
-    // Available avatar options - using the cat assets
+    // Available avatar options - using the bird assets
     const avatarOptions: AvatarOption[] = [
-        { id: "cat-1", image: "/cat-1.png", name: "Whiskers" },
-        { id: "cat-2", image: "/cat-2.png", name: "Mittens" },
-        { id: "cat-3", image: "/cat-3.png", name: "Shadow" },
+        { id: "albatross", image: "/birds/albatross.png", name: "Albatross" },
+        { id: "bluetit", image: "/birds/bluetit.png", name: "Blue Tit" },
+        { id: "eagle", image: "/birds/eagle.png", name: "Eagle" },
+        { id: "goose", image: "/birds/goose.png", name: "Goose" },
+        { id: "hummingbird", image: "/birds/hummingbird.png", name: "Hummingbird" },
+        { id: "owl", image: "/birds/owl.png", name: "Owl" },
+        { id: "pigeon", image: "/birds/pigeon.png", name: "Pigeon" },
+        { id: "raven", image: "/birds/raven.png", name: "Raven" },
+        { id: "robin", image: "/birds/robin.png", name: "Robin" },
+        { id: "swallow", image: "/birds/swallow.png", name: "Swallow" },
+        { id: "swan", image: "/birds/swan.png", name: "Swan" },
     ];
 
-    let currentGuestIndex = $state(0);
     let guestAvatars = $state<GuestAvatar[]>(
         guests.map((name) => ({
             guestName: name,
             selectedAvatar: null,
             message: "",
+            isDropdownOpen: false,
         })),
     );
     let isSubmitting = $state(false);
 
-    function selectAvatar(avatarId: string) {
+    function toggleDropdown(guestIndex: number) {
         guestAvatars = guestAvatars.map((ga, index) =>
-            index === currentGuestIndex
-                ? { ...ga, selectedAvatar: avatarId }
+            index === guestIndex
+                ? { ...ga, isDropdownOpen: !ga.isDropdownOpen }
+                : { ...ga, isDropdownOpen: false }
+        );
+    }
+
+    function selectAvatar(guestIndex: number, avatarId: string) {
+        guestAvatars = guestAvatars.map((ga, index) =>
+            index === guestIndex
+                ? { ...ga, selectedAvatar: avatarId, isDropdownOpen: false }
                 : ga,
         );
     }
 
-    function updateMessage(event: Event) {
+    function updateMessage(guestIndex: number, event: Event) {
         const target = event.target as HTMLTextAreaElement;
         const message = target.value.slice(0, 140); // Enforce 140 char limit
         guestAvatars = guestAvatars.map((ga, index) =>
-            index === currentGuestIndex ? { ...ga, message } : ga,
+            index === guestIndex ? { ...ga, message } : ga,
         );
     }
 
-    function nextGuest() {
-        if (currentGuestIndex < guests.length - 1) {
-            currentGuestIndex++;
-        }
-    }
-
-    function prevGuest() {
-        if (currentGuestIndex > 0) {
-            currentGuestIndex--;
-        }
-    }
+    let errorMessage = $state("");
 
     async function submitAvatars() {
+        errorMessage = "";
         isSubmitting = true;
 
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        try {
+            // Prepare the avatar selections for the API
+            const avatars: AvatarSelectionType[] = guestAvatars.map((ga) => ({
+                guestName: ga.guestName,
+                avatar: ga.selectedAvatar || "",
+                message: ga.message,
+            }));
 
-        console.log("Avatars submitted:", guestAvatars);
+            // Call the API to save avatar selections
+            const response = await saveAvatars({
+                email,
+                avatars,
+            });
 
-        isSubmitting = false;
-        oncomplete?.();
+            if (response.success) {
+                console.log("Avatars saved successfully:", avatars);
+                oncomplete?.();
+            } else {
+                errorMessage = response.message || "Failed to save avatar selections";
+            }
+        } catch (error: any) {
+            errorMessage = error.message || "Unable to save avatar selections. Please try again.";
+            console.error("Save avatars error:", error);
+        } finally {
+            isSubmitting = false;
+        }
     }
 
     $effect(() => {
@@ -80,131 +118,131 @@
                 guestName: name,
                 selectedAvatar: null,
                 message: "",
+                isDropdownOpen: false,
             }));
         }
     });
 
-    let currentGuest = $derived(guestAvatars[currentGuestIndex]);
+    function getSelectedAvatarOption(avatarId: string | null) {
+        return avatarOptions.find((opt) => opt.id === avatarId);
+    }
+
     let canSubmit = $derived(
         guestAvatars.every((ga) => ga.selectedAvatar !== null),
     );
-    let messageLength = $derived(currentGuest?.message?.length || 0);
 </script>
 
 <div class="avatar-selection card animate-fadeIn">
     <div class="selection-header">
-        <h2>Choose Your Avatar</h2>
-        {#if guests.length > 1}
-            <p class="guest-indicator">
-                Selecting for: <strong>{currentGuest?.guestName}</strong>
-                <span class="guest-count"
-                    >({currentGuestIndex + 1} of {guests.length})</span
-                >
-            </p>
-        {/if}
+        <h2>Choose Your Avatars</h2>
+        <p class="subtitle">Select a bird and leave a message! this will be visible to everyone!!</p>
     </div>
 
-    <div class="avatar-grid">
-        {#each avatarOptions as avatar (avatar.id)}
-            <button
-                class="avatar-option"
-                class:selected={currentGuest?.selectedAvatar === avatar.id}
-                onclick={() => selectAvatar(avatar.id)}
-            >
-                <img src={avatar.image} alt={avatar.name} class="avatar-img" />
-                <span class="avatar-name">{avatar.name}</span>
-                {#if currentGuest?.selectedAvatar === avatar.id}
-                    <img
-                        src="/confirm.png"
-                        alt="Selected"
-                        class="selected-badge"
-                    />
-                {/if}
-            </button>
+    <div class="guests-list">
+        {#each guestAvatars as guestAvatar, guestIndex (guestAvatar.guestName)}
+            <div class="guest-section">
+                <div class="guest-name-row">
+                    <h3 class="guest-name">{guestAvatar.guestName}</h3>
+                    {#if guestAvatar.selectedAvatar}
+                        <img
+                            src="/confirm.png"
+                            alt="Selected"
+                            class="selection-badge"
+                        />
+                    {/if}
+                </div>
+
+                <div class="avatar-dropdown-container">
+                    <button
+                        type="button"
+                        class="dropdown-trigger"
+                        class:has-selection={guestAvatar.selectedAvatar !== null}
+                        onclick={() => toggleDropdown(guestIndex)}
+                    >
+                        {#if guestAvatar.selectedAvatar}
+                            {@const selectedOption = getSelectedAvatarOption(guestAvatar.selectedAvatar)}
+                            {#if selectedOption}
+                                <img
+                                    src={selectedOption.image}
+                                    alt={selectedOption.name}
+                                    class="dropdown-preview-img"
+                                />
+                                <span>{selectedOption.name}</span>
+                            {/if}
+                        {:else}
+                            <span class="placeholder">Select an avatar...</span>
+                        {/if}
+                        <span class="dropdown-arrow" class:open={guestAvatar.isDropdownOpen}>▼</span>
+                    </button>
+
+                    {#if guestAvatar.isDropdownOpen}
+                        <div class="dropdown-menu">
+                            {#each avatarOptions as avatar (avatar.id)}
+                                <button
+                                    type="button"
+                                    class="dropdown-option"
+                                    class:selected={guestAvatar.selectedAvatar === avatar.id}
+                                    onclick={() => selectAvatar(guestIndex, avatar.id)}
+                                >
+                                    <img
+                                        src={avatar.image}
+                                        alt={avatar.name}
+                                        class="dropdown-option-img"
+                                    />
+                                    <span>{avatar.name}</span>
+                                    {#if guestAvatar.selectedAvatar === avatar.id}
+                                        <img
+                                            src="/confirm.png"
+                                            alt="Selected"
+                                            class="option-check"
+                                        />
+                                    {/if}
+                                </button>
+                            {/each}
+                        </div>
+                    {/if}
+                </div>
+
+                <div class="message-section">
+                    <label for="message-{guestIndex}">
+                        Message (optional)
+                        <span class="char-count" class:warning={guestAvatar.message.length > 120}>
+                            {guestAvatar.message.length}/140
+                        </span>
+                    </label>
+                    <textarea
+                        id="message-{guestIndex}"
+                        placeholder="Leave a message for the happy couple 💕"
+                        value={guestAvatar.message}
+                        oninput={(e) => updateMessage(guestIndex, e)}
+                        maxlength="140"
+                        rows="2"
+                    ></textarea>
+                </div>
+            </div>
         {/each}
     </div>
 
-    <div class="message-section">
-        <label for="message">
-            Leave a message (optional)
-            <span class="char-count" class:warning={messageLength > 120}>
-                {messageLength}/140
-            </span>
-        </label>
-        <textarea
-            id="message"
-            placeholder="Congratulations! We're so happy for you! 💕"
-            value={currentGuest?.message || ""}
-            oninput={updateMessage}
-            maxlength="140"
-            rows="3"
-        ></textarea>
-    </div>
-
-    {#if guests.length > 1}
-        <div class="navigation">
-            <button
-                class="btn btn-outline"
-                onclick={prevGuest}
-                disabled={currentGuestIndex === 0}
-            >
-                Previous
-            </button>
-
-            <div class="guest-dots">
-                {#each guests as _, index}
-                    <span
-                        class="dot"
-                        class:active={index === currentGuestIndex}
-                        class:completed={guestAvatars[index]?.selectedAvatar !==
-                            null}
-                    ></span>
-                {/each}
-            </div>
-
-            {#if currentGuestIndex < guests.length - 1}
-                <button
-                    class="btn btn-primary"
-                    onclick={nextGuest}
-                    disabled={!currentGuest?.selectedAvatar}
-                >
-                    Next Guest
-                    <img src="/next-arrow.png" alt="" class="btn-icon-img" />
-                </button>
-            {:else}
-                <button
-                    class="btn btn-primary"
-                    onclick={submitAvatars}
-                    disabled={!canSubmit || isSubmitting}
-                >
-                    {#if isSubmitting}
-                        Saving...
-                    {:else}
-                        Complete
-                        <img src="/confirm.png" alt="" class="btn-icon-img" />
-                    {/if}
-                </button>
-            {/if}
-        </div>
-    {:else}
-        <button
-            class="btn btn-primary submit-single"
-            onclick={submitAvatars}
-            disabled={!canSubmit || isSubmitting}
-        >
-            {#if isSubmitting}
-                Saving...
-            {:else}
-                Join the Plaza!
-                <img src="/confirm.png" alt="" class="btn-icon-img" />
-            {/if}
-        </button>
+    {#if errorMessage}
+        <p class="error">{errorMessage}</p>
     {/if}
+
+    <button
+        class="btn btn-primary submit-btn"
+        onclick={submitAvatars}
+        disabled={!canSubmit || isSubmitting}
+    >
+        {#if isSubmitting}
+            Saving...
+        {:else}
+            Join the Plaza!
+        {/if}
+    </button>
 </div>
 
 <style>
     .avatar-selection {
-        max-width: 500px;
+        max-width: 600px;
         width: 100%;
         margin: 0 auto;
         position: relative;
@@ -221,81 +259,163 @@
     .selection-header h2 {
         font-size: 2rem;
         color: var(--color-text);
-        margin-bottom: var(--spacing-sm);
+        margin-bottom: var(--spacing-xs);
     }
 
-    .guest-indicator {
+    .subtitle {
         color: var(--color-text-light);
         font-size: 0.95rem;
+        margin: 0;
     }
 
-    .guest-count {
-        color: var(--color-text-light);
-        font-size: 0.85rem;
-    }
-
-    .avatar-grid {
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        gap: var(--spacing-md);
+    .guests-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-xl);
         margin-bottom: var(--spacing-xl);
     }
 
-    .avatar-option {
+    .guest-section {
         display: flex;
         flex-direction: column;
-        align-items: center;
-        padding: var(--spacing-md);
-        background: var(--color-white);
+        gap: var(--spacing-md);
+        padding: var(--spacing-lg);
+        background: var(--color-background-alt);
         border: 2px solid var(--color-border-light);
-        border-radius: var(--radius-lg);
-        cursor: pointer;
-        transition: all var(--transition-normal);
+        border-radius: var(--radius-md);
+    }
+
+    .guest-name-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .guest-name {
+        font-family: var(--font-display);
+        font-size: 1.3rem;
+        color: var(--color-text);
+        margin: 0;
+    }
+
+    .selection-badge {
+        width: 24px;
+        height: 24px;
+        object-fit: contain;
+    }
+
+    .avatar-dropdown-container {
         position: relative;
     }
 
-    .avatar-option:hover {
-        transform: translateY(-4px);
-        border-color: var(--color-border);
+    .dropdown-trigger {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-md);
+        background: var(--color-white);
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        font-family: var(--font-mimko);
+        font-size: 1rem;
+        text-align: left;
     }
 
-    .avatar-option.selected {
-        border-color: var(--color-border);
+    .dropdown-trigger:hover {
+        border-color: var(--color-text);
+    }
+
+    .dropdown-trigger.has-selection {
+        border-color: var(--color-text);
+    }
+
+    .dropdown-preview-img {
+        width: 32px;
+        height: 32px;
+        object-fit: contain;
+    }
+
+    .placeholder {
+        color: var(--color-text-light);
+        flex: 1;
+    }
+
+    .dropdown-trigger span:not(.dropdown-arrow):not(.placeholder) {
+        flex: 1;
+    }
+
+    .dropdown-arrow {
+        margin-left: auto;
+        font-size: 0.75rem;
+        transition: transform var(--transition-fast);
+    }
+
+    .dropdown-arrow.open {
+        transform: rotate(180deg);
+    }
+
+    .dropdown-menu {
+        position: absolute;
+        top: calc(100% + 4px);
+        left: 0;
+        right: 0;
+        background: var(--color-white);
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-md);
+        max-height: 300px;
+        overflow-y: auto;
+        z-index: 200;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+
+    .dropdown-option {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-sm) var(--spacing-md);
+        background: var(--color-white);
+        border: none;
+        border-bottom: 1px solid var(--color-border-light);
+        cursor: pointer;
+        transition: background var(--transition-fast);
+        font-family: var(--font-mimko);
+        font-size: 0.95rem;
+        text-align: left;
+    }
+
+    .dropdown-option:last-child {
+        border-bottom: none;
+    }
+
+    .dropdown-option:hover {
         background: var(--color-background-alt);
     }
 
-    .avatar-img {
-        width: 80px;
-        height: 80px;
+    .dropdown-option.selected {
+        background: var(--color-background-alt);
+    }
+
+    .dropdown-option-img {
+        width: 32px;
+        height: 32px;
         object-fit: contain;
-        margin-bottom: var(--spacing-sm);
-        transition: transform var(--transition-normal);
     }
 
-    .avatar-option:hover .avatar-img {
-        transform: scale(1.1);
+    .dropdown-option span {
+        flex: 1;
     }
 
-    .avatar-name {
-        font-family: var(--font-display);
-        font-size: 1rem;
-        color: var(--color-text);
-    }
-
-    .selected-badge {
-        position: absolute;
-        top: -8px;
-        right: -8px;
-        width: 28px;
-        height: 28px;
-        background: var(--color-white);
-        border-radius: 50%;
-        padding: 4px;
-        border: 2px solid var(--color-border);
+    .option-check {
+        width: 18px;
+        height: 18px;
+        object-fit: contain;
     }
 
     .message-section {
-        margin-bottom: var(--spacing-xl);
         font-family: var(--font-mimko);
     }
 
@@ -305,6 +425,7 @@
         align-items: center;
         margin-bottom: var(--spacing-xs);
         font-family: var(--font-mimko);
+        font-size: 0.9rem;
     }
 
     .char-count {
@@ -318,49 +439,36 @@
     }
 
     textarea {
+        width: 100%;
+        padding: var(--spacing-sm) var(--spacing-md);
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-md);
         font-family: var(--font-mimko);
+        font-size: 0.95rem;
         resize: none;
-        min-height: 80px;
     }
 
-    .navigation {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--spacing-md);
+    .submit-btn {
+        width: 100%;
+        font-size: 1.1rem;
     }
 
-    .guest-dots {
-        display: flex;
-        gap: var(--spacing-xs);
-    }
-
-    .dot {
-        width: 8px;
-        height: 8px;
-        border-radius: 50%;
-        background: var(--color-border-light);
-        border: 1px solid var(--color-border);
-        transition: all var(--transition-normal);
-    }
-
-    .dot.active {
-        background: var(--color-text);
-        transform: scale(1.3);
-    }
-
-    .dot.completed {
-        background: var(--color-text);
+    .error {
+        color: var(--color-text);
+        font-size: 0.875rem;
+        text-align: center;
+        font-weight: 600;
+        background: var(--color-background-alt);
+        padding: var(--spacing-sm);
+        border-radius: var(--radius-sm);
+        border: 2px solid var(--color-border);
+        margin-bottom: var(--spacing-md);
     }
 
     .btn-icon-img {
-        width: 16px;
-        height: 16px;
+        width: 18px;
+        height: 18px;
         object-fit: contain;
-    }
-
-    .submit-single {
-        width: 100%;
     }
 
     @media (max-width: 480px) {
@@ -368,26 +476,12 @@
             padding: var(--spacing-lg);
         }
 
-        .avatar-grid {
-            grid-template-columns: repeat(3, 1fr);
-            gap: var(--spacing-sm);
+        .guest-section {
+            padding: var(--spacing-md);
         }
 
-        .avatar-img {
-            width: 60px;
-            height: 60px;
-        }
-
-        .navigation {
-            flex-wrap: wrap;
-            justify-content: center;
-        }
-
-        .guest-dots {
-            order: -1;
-            width: 100%;
-            justify-content: center;
-            margin-bottom: var(--spacing-md);
+        .guest-name {
+            font-size: 1.1rem;
         }
     }
 </style>

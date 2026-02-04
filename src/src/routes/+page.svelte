@@ -5,18 +5,28 @@
 
     let currentView = $state<AppView>("rsvp");
     let rsvpGuests = $state<string[]>([]);
+    let rsvpEmail = $state<string>("");
+    let avatarRefreshTrigger = $state(1); // Start at 1 to trigger initial fetch
 
     // Check if RSVP deadline has passed (August 1st, 2026)
     const rsvpDeadline = new Date("2026-08-01T00:00:00");
     const isRsvpClosed = $derived(new Date() >= rsvpDeadline);
 
-    function handleRSVPComplete() {
+    function handleRSVPComplete(guests: string[], email: string) {
         // This will be called after successful RSVP submission
-        // Guest names will be set before this is called
+        // Guest names and email will be set before this is called
+        rsvpGuests = guests;
+        rsvpEmail = email;
         currentView = "avatar-selection";
     }
 
     function handleAvatarComplete() {
+        // Increment trigger to refresh avatars with newly saved data
+        avatarRefreshTrigger++;
+        currentView = "plaza-only";
+    }
+
+    function goToPlaza() {
         currentView = "plaza-only";
     }
 
@@ -29,26 +39,46 @@
 </script>
 
 <div class="page-container">
-    <!-- Avatar Plaza is always visible in the background -->
-    <AvatarPlaza />
-
-    <!-- Content overlay -->
-    <div class="content-overlay">
-        {#if currentView === "rsvp" && !isRsvpClosed}
-            <div class="content-wrapper animate-fadeIn">
+    <!-- Avatar Plaza persists across all views - never recreated -->
+    <AvatarPlaza refreshTrigger={avatarRefreshTrigger} />
+    
+    <!-- Skip to Plaza button - visible when not in plaza view -->
+    {#if currentView !== "plaza-only" && !isRsvpClosed}
+        <button class="skip-to-plaza-btn" onclick={goToPlaza}>
+            Skip to Guest Plaza →
+        </button>
+    {/if}
+    
+    {#if currentView === "rsvp" && !isRsvpClosed}
+        <div class="content-overlay">
+            <div class="container">
                 <RSVPForm oncomplete={handleRSVPComplete} />
             </div>
-        {:else if currentView === "avatar-selection"}
-            <div class="content-wrapper animate-fadeIn">
+        </div>
+    {:else if currentView === "avatar-selection"}
+        <div class="content-overlay">
+            <div class="container">
                 <AvatarSelection
                     guests={rsvpGuests}
+                    email={rsvpEmail}
                     oncomplete={handleAvatarComplete}
                 />
             </div>
-        {:else if currentView === "plaza-only" || isRsvpClosed}
+        </div>
+    {:else if currentView === "plaza-only" || isRsvpClosed}
+        <div class="content-overlay">
             <div class="plaza-view animate-fadeIn">
-                <header class="plaza-header">
-                    <h1>Jemarko</h1>
+                <!-- SVG filter for fuzzy/hand-drawn effect -->
+                <svg class="svg-filters" aria-hidden="true">
+                    <defs>
+                        <filter id="fuzzy-header">
+                            <feTurbulence type="fractalNoise" baseFrequency="0.03" numOctaves="3" result="noise" />
+                            <feDisplacementMap in="SourceGraphic" in2="noise" scale="2" xChannelSelector="R" yChannelSelector="G" />
+                        </filter>
+                    </defs>
+                </svg>
+                <header class="plaza-header fuzzy-border">
+                    <img src="/j_and_m.png" alt="Jemarko" class="plaza-logo" />
                     {#if isRsvpClosed}
                         <p class="closed-message">
                             RSVP is now closed. Thank you to all our guests!
@@ -58,16 +88,46 @@
                     {/if}
                 </header>
             </div>
-        {/if}
-    </div>
+        </div>
+    {/if}
 </div>
 
 <style>
+    .svg-filters {
+        position: absolute;
+        width: 0;
+        height: 0;
+        overflow: hidden;
+    }
+
     .page-container {
         position: relative;
         min-height: 100vh;
         width: 100%;
         background: var(--color-white);
+    }
+
+    .skip-to-plaza-btn {
+        position: fixed;
+        top: var(--spacing-md);
+        right: var(--spacing-md);
+        z-index: 100;
+        font-family: var(--font-mimko);
+        font-size: 0.9rem;
+        padding: var(--spacing-sm) var(--spacing-md);
+        border: 1px solid var(--color-border);
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--color-text);
+        cursor: pointer;
+        transition: all var(--transition-normal);
+        border-radius: var(--radius-md);
+        backdrop-filter: blur(4px);
+    }
+
+    .skip-to-plaza-btn:hover {
+        background-color: var(--color-text);
+        color: var(--color-white);
+        transform: translateX(4px);
     }
 
     .content-overlay {
@@ -78,12 +138,19 @@
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        padding: var(--spacing-lg);
+        padding: var(--spacing-xl);
+        pointer-events: none; /* Allow clicks to pass through to avatars */
     }
 
-    .content-wrapper {
+    .container {
         width: 100%;
-        max-width: 500px;
+        max-width: 600px;
+        pointer-events: auto; /* But form content should be clickable */
+    }
+
+    .plaza-view {
+        text-align: center;
+        pointer-events: none; /* Allow clicks to pass through to avatars */
     }
 
     .page-header {
@@ -177,12 +244,14 @@
     }
 
     .plaza-header {
-        background: var(--color-white);
         padding: var(--spacing-xl) var(--spacing-2xl);
-        border-radius: var(--radius-lg);
-        border: 2px solid var(--color-border);
+        border-radius: 20px;
         position: relative;
-        z-index: 1;
+        z-index: 0; /* Behind avatars */
+        border: none;
+        background: transparent;
+        box-shadow: none;
+        opacity: 0.4; /* Reduced opacity */
     }
 
     .plaza-header h1 {
@@ -191,10 +260,24 @@
         margin-bottom: var(--spacing-sm);
     }
 
+    .plaza-logo {
+        max-width: 300px;
+        height: auto;
+        margin-bottom: var(--spacing-sm);
+    }
+
+    .subtitle {
+        color: var(--color-text);
+        font-size: 1.1rem;
+        font-family: var(--font-mimko);
+        margin: 0;
+    }
+
     .closed-message {
         color: var(--color-text-light);
         font-size: 1rem;
         font-family: var(--font-mimko);
+        margin: 0;
     }
 
     @media (max-width: 640px) {
@@ -202,16 +285,20 @@
             padding: var(--spacing-md);
         }
 
-        .page-header h1 {
-            font-size: 3rem;
+        .container {
+            max-width: 100%;
         }
 
-        .subtitle {
-            font-size: 1.25rem;
+        .plaza-header {
+            padding: var(--spacing-sm) var(--spacing-md);
         }
 
         .plaza-header h1 {
             font-size: 2.5rem;
+        }
+
+        .plaza-logo {
+            max-width: 75px;
         }
     }
 
@@ -222,6 +309,14 @@
 
         .page-header {
             padding: var(--spacing-lg);
+        }
+
+        .plaza-header {
+            padding: var(--spacing-sm) var(--spacing-md);
+        }
+
+        .plaza-logo {
+            max-width: 75px;
         }
     }
 </style>

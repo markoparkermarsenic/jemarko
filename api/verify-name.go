@@ -67,10 +67,42 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	if foundGuest != nil {
-		log.Printf("Guest found: %s (ID: %s)", foundGuest.Name, foundGuest.ID)
+		log.Printf("Guest found: %s (ID: %s, Address: %s)", foundGuest.Name, foundGuest.ID, foundGuest.Address)
+
+		// Find all family members with the same address
+		familyMembers := []shared.FamilyMember{}
+		// Normalize address for comparison
+		normalizedAddress := strings.ToLower(strings.TrimSpace(foundGuest.Address))
+		// Group by address only if address exists and is not "n/a" or variations
+		shouldGroup := foundGuest.Address != "" &&
+			normalizedAddress != "n/a" &&
+			normalizedAddress != "na" &&
+			normalizedAddress != "n.a." &&
+			normalizedAddress != "n.a"
+
+		if shouldGroup {
+			for _, guest := range guestList {
+				if guest.Address == foundGuest.Address {
+					familyMembers = append(familyMembers, shared.FamilyMember{
+						ID:   guest.ID,
+						Name: guest.Name,
+					})
+				}
+			}
+		} else {
+			// No grouping for empty or N/A addresses - only return this guest
+			familyMembers = append(familyMembers, shared.FamilyMember{
+				ID:   foundGuest.ID,
+				Name: foundGuest.Name,
+			})
+		}
+
+		log.Printf("Found %d family members at %s for %s", len(familyMembers), foundGuest.Address, foundGuest.Name)
+
 		json.NewEncoder(w).Encode(shared.VerifyNameResponse{
-			Success: true,
-			Message: "Guest found",
+			Success:       true,
+			Message:       "Guest found",
+			FamilyMembers: familyMembers,
 		})
 	} else {
 		log.Printf("Guest not found: %s", req.Name)
