@@ -4,6 +4,11 @@
   "buildCommand": "cd src && npm run build",
   "outputDirectory": "src/.svelte-kit",
   "devCommand": "cd src && npm run dev -- --port $PORT",
+  "functions": {
+    "api/*.go": {
+      "runtime": "@vercel/go"
+    }
+  },
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/:path*" }
   ]

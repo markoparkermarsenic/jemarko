@@ -2,6 +2,7 @@
 api/tools/
 api/invite_list.csv
 api/README.md
+api/.env
 
 # Supabase local config
 supabase/
