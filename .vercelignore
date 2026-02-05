@@ -1,0 +1,7 @@
+# Don't deploy CSV import tools or guest data
+api/tools/
+api/invite_list.csv
+api/README.md
+
+# Supabase local config
+supabase/
