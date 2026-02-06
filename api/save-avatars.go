@@ -9,7 +9,7 @@ import (
 	"net/url"
 	"os"
 
-	shared "api/_shared"
+	"api/shared"
 )
 
 // Handler handles saving avatar selections for guests

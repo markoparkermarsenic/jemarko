@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"os"
 
-	shared "api/_shared"
+	"api/shared"
 )
 
 // Handler handles getting avatar selections from all RSVPs

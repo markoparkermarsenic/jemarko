@@ -1,7 +1,7 @@
 package handler
 
 import (
-	shared "api/_shared"
+	"api/shared"
 	"encoding/json"
 	"net/http"
 	"time"
