@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strings"
 
-	"api/shared"
+	"utils/shared"
 )
 
 // Handler handles name verification requests

@@ -6,7 +6,7 @@ import (
 	"log"
 	"net/http"
 
-	"api/shared"
+	"utils/shared"
 )
 
 // Handler handles RSVP submission requests
