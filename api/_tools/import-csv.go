@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"api/shared"
+	shared "api/_shared"
 )
 
 func main() {

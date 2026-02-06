@@ -1,11 +1,10 @@
 package handler
 
 import (
+	shared "api/_shared"
 	"encoding/json"
 	"net/http"
 	"time"
-
-	"api/shared"
 )
 
 // Handler handles health check requests
