@@ -3,5 +3,8 @@
   "installCommand": "cd src && npm install",
   "buildCommand": "cd src && npm run build",
   "outputDirectory": "src/.svelte-kit",
-  "devCommand": "cd src && npm run dev -- --port $PORT"
+  "devCommand": "cd src && npm run dev",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/:path*" }
+  ]
 }
