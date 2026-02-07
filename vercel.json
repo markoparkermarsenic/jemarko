@@ -1,10 +1,30 @@
 {
-  "framework": "sveltekit",
-  "installCommand": "cd src && npm install",
-  "buildCommand": "cd src && npm run build",
-  "outputDirectory": "src/.svelte-kit",
-  "devCommand": "cd src && npm run dev",
-  "rewrites": [
-    { "source": "/api/:path*", "destination": "/api/:path*" }
+  "version": 2,
+  "builds": [
+    {
+      "src": "src/package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": ".svelte-kit/vercel/output"
+      }
+    },
+    {
+      "src": "api/*.go",
+      "use": "@vercel/go"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/verify-name",
+      "dest": "/api/verify-name.go"
+    },
+    {
+      "src": "/api/submit-rsvp",
+      "dest": "/api/submit-rsvp.go"
+    },
+    {
+      "src": "/api/health",
+      "dest": "/api/health.go"
+    }
   ]
 }
