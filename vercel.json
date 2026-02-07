@@ -24,6 +24,13 @@
     {
       "src": "/api/health",
       "dest": "/api/health.go"
+    },    {
+      "src": "/api/save-rsvp",
+      "dest": "/api/save-rsvp.go"
+    },
+    {
+      "src": "/api/get-avatars",
+      "dest": "/api/get-avatars.go"
     }
   ]
 }
