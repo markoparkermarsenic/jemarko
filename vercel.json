@@ -1,4 +1,5 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "builds": [
     {
       "src": "src/package.json",
@@ -12,25 +13,26 @@
       "use": "@vercel/go"
     }
   ],
-  "routes": [
+  "rewrites": [
     {
-      "src": "/api/verify-name",
-      "dest": "/api/verify-name.go"
+      "source": "/api/verify-name",
+      "destination": "/api/verify-name.go"
     },
     {
-      "src": "/api/submit-rsvp",
-      "dest": "/api/submit-rsvp.go"
+      "source": "/api/submit-rsvp",
+      "destination": "/api/submit-rsvp.go"
     },
     {
-      "src": "/api/health",
-      "dest": "/api/health.go"
-    },    {
-      "src": "/api/save-rsvp",
-      "dest": "/api/save-rsvp.go"
+      "source": "/api/health",
+      "destination": "/api/health.go"
     },
     {
-      "src": "/api/get-avatars",
-      "dest": "/api/get-avatars.go"
+      "source": "/api/save-rsvp",
+      "destination": "/api/save-rsvp.go"
+    },
+    {
+      "source": "/api/get-avatars",
+      "destination": "/api/get-avatars.go"
     }
   ]
 }
