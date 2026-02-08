@@ -33,6 +33,10 @@
     {
       "source": "/api/get-avatars",
       "destination": "/api/get-avatars.go"
+    },
+        {
+      "source": "/api/save-avatars",
+      "destination": "/api/save-avatars.go"
     }
   ]
 }
