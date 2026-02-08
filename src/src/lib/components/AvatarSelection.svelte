@@ -143,13 +143,6 @@
             <div class="guest-section">
                 <div class="guest-name-row">
                     <h3 class="guest-name">{guestAvatar.guestName}</h3>
-                    {#if guestAvatar.selectedAvatar}
-                        <img
-                            src="/confirm.png"
-                            alt="Selected"
-                            class="selection-badge"
-                        />
-                    {/if}
                 </div>
 
                 <div class="avatar-dropdown-container">
@@ -190,13 +183,6 @@
                                         class="dropdown-option-img"
                                     />
                                     <span>{avatar.name}</span>
-                                    {#if guestAvatar.selectedAvatar === avatar.id}
-                                        <img
-                                            src="/confirm.png"
-                                            alt="Selected"
-                                            class="option-check"
-                                        />
-                                    {/if}
                                 </button>
                             {/each}
                         </div>
