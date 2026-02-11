@@ -106,10 +106,11 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		}
 	} else {
 		log.Printf("⚠️  Skipping confirmation email for unverified user: %s (%s)", req.Name, req.Email)
-		log.Printf("⚠️  Calling SendUnverifiedRSVPNotification for: %s", req.Email)
+		log.Printf("⚠️  Sending admin notification for unverified RSVP")
 		// Send admin notification for unverified RSVP with verification button
-		go shared.SendUnverifiedRSVPNotification(req)
-		log.Printf("⚠️  SendUnverifiedRSVPNotification goroutine started")
+		// Note: Not using goroutine to ensure it completes before serverless function terminates
+		shared.SendUnverifiedRSVPNotification(req)
+		log.Printf("⚠️  Admin notification sent")
 	}
 
 	if req.IsAttending {
