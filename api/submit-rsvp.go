@@ -48,6 +48,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	// If attending, validate guest list
 	verified := true
+	log.Printf("Processing RSVP: Name=%s, Email=%s, IsAttending=%v, Guests=%v", req.Name, req.Email, req.IsAttending, req.AttendingGuests)
 	if req.IsAttending {
 		// Validate that at least one guest is attending
 		if len(req.AttendingGuests) == 0 {
@@ -96,15 +97,19 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send confirmation email only for verified users
+	log.Printf("Verified status: %v", verified)
 	if verified {
+		log.Printf("Sending confirmation email to verified user: %s", req.Email)
 		if err := shared.SendConfirmationEmail(req); err != nil {
 			log.Printf("Failed to send confirmation email: %v", err)
 			// Don't fail the request if email fails - just log it
 		}
 	} else {
 		log.Printf("⚠️  Skipping confirmation email for unverified user: %s (%s)", req.Name, req.Email)
+		log.Printf("⚠️  Calling SendUnverifiedRSVPNotification for: %s", req.Email)
 		// Send admin notification for unverified RSVP with verification button
 		go shared.SendUnverifiedRSVPNotification(req)
+		log.Printf("⚠️  SendUnverifiedRSVPNotification goroutine started")
 	}
 
 	if req.IsAttending {
