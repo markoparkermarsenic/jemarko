@@ -208,6 +208,10 @@ func SendUnverifiedRSVPNotification(req RSVPRequest) {
 	if baseURL == "" {
 		baseURL = "https://your-domain.vercel.app" // fallback
 	}
+	// Ensure BASE_URL has https:// prefix
+	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		baseURL = "https://" + baseURL
+	}
 
 	emailService := NewEmailService()
 	timestamp := time.Now().Format(time.RFC1123)
