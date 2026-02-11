@@ -34,9 +34,13 @@
       "source": "/api/get-avatars",
       "destination": "/api/get-avatars.go"
     },
-        {
+    {
       "source": "/api/save-avatars",
       "destination": "/api/save-avatars.go"
+    },
+    {
+      "source": "/api/verify-rsvp",
+      "destination": "/api/verify-rsvp.go"
     }
   ]
 }

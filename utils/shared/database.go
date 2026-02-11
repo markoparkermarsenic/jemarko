@@ -36,6 +36,7 @@ type RSVPRecord struct {
 	AttendingGuests []string `json:"attending_guests,omitempty"`
 	Diet            string   `json:"diet,omitempty"`
 	SubmittedAt     string   `json:"submitted_at,omitempty"`
+	Verified        bool     `json:"verified"`
 }
 
 var (
@@ -137,6 +138,7 @@ func (db *Database) SaveRSVP(rsvp RSVPRequest) error {
 		AttendingGuests: rsvp.AttendingGuests,
 		Diet:            rsvp.Diet,
 		SubmittedAt:     time.Now().UTC().Format(time.RFC3339),
+		Verified:        rsvp.Verified,
 	}
 
 	jsonData, err := json.Marshal(record)

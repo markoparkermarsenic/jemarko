@@ -105,7 +105,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			FamilyMembers: familyMembers,
 		})
 	} else {
-		log.Printf("Guest not found: %s", req.Name)
+		log.Printf("Guest not found (allowing as unverified): %s", req.Name)
 
 		// Send notification to admin about unlisted guest
 		ipAddress := r.RemoteAddr
@@ -116,10 +116,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 		go shared.SendUnlistedGuestNotification(req, ipAddress, userAgent)
 
-		w.WriteHeader(http.StatusNotFound)
+		// Allow the user to proceed but with empty family members
+		// They will be marked as unverified when they submit RSVP
 		json.NewEncoder(w).Encode(shared.VerifyNameResponse{
-			Success: false,
-			Message: "Name not found on the guest list. Please check the spelling or contact us.",
+			Success:       true,
+			Message:       "Please proceed with your RSVP",
+			FamilyMembers: []shared.FamilyMember{},
 		})
 	}
 }

@@ -2,7 +2,6 @@ package handler
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 
@@ -48,6 +47,7 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If attending, validate guest list
+	verified := true
 	if req.IsAttending {
 		// Validate that at least one guest is attending
 		if len(req.AttendingGuests) == 0 {
@@ -74,19 +74,19 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// Validate that all attending guests exist in the guest list
+		// Check if all attending guests exist in the guest list
+		// If any guest is not found, mark as unverified but still allow RSVP
 		for _, attendingGuest := range req.AttendingGuests {
 			if !shared.IsGuestInList(attendingGuest, guestList) {
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(shared.RSVPResponse{
-					Success: false,
-					Message: fmt.Sprintf("Guest '%s' is not on the guest list", attendingGuest),
-				})
-				return
+				verified = false
+				log.Printf("⚠️  Unverified guest attempting RSVP: %s (not found: %s)", req.Name, attendingGuest)
+				break
 			}
 		}
 	}
+
+	// Set verified status
+	req.Verified = verified
 
 	// Save RSVP to database
 	db := shared.NewDatabase()
@@ -95,10 +95,16 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		// Continue even if database save fails
 	}
 
-	// Send confirmation email
-	if err := shared.SendConfirmationEmail(req); err != nil {
-		log.Printf("Failed to send confirmation email: %v", err)
-		// Don't fail the request if email fails - just log it
+	// Send confirmation email only for verified users
+	if verified {
+		if err := shared.SendConfirmationEmail(req); err != nil {
+			log.Printf("Failed to send confirmation email: %v", err)
+			// Don't fail the request if email fails - just log it
+		}
+	} else {
+		log.Printf("⚠️  Skipping confirmation email for unverified user: %s (%s)", req.Name, req.Email)
+		// Send admin notification for unverified RSVP with verification button
+		go shared.SendUnverifiedRSVPNotification(req)
 	}
 
 	if req.IsAttending {

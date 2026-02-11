@@ -43,17 +43,26 @@
         try {
             const response = await verifyName(nameInput.trim(), emailInput.trim());
             
-            if (response.success && response.familyMembers) {
+            if (response.success) {
                 // Convert family members to guest selections with all initially marked as attending
-                familyMembers = response.familyMembers.map(member => ({
-                    id: member.id,
-                    name: member.name,
-                    isAttending: true
-                }));
+                if (response.familyMembers && response.familyMembers.length > 0) {
+                    familyMembers = response.familyMembers.map(member => ({
+                        id: member.id,
+                        name: member.name,
+                        isAttending: true
+                    }));
+                } else {
+                    // For unverified users with no family members, add the user's name
+                    familyMembers = [{
+                        id: crypto.randomUUID(),
+                        name: nameInput.trim(),
+                        isAttending: true
+                    }];
+                }
                 
                 step = "family-selection";
             } else {
-                errorMessage = response.message || "Name not found on the guest list. Please check the spelling or contact us.";
+                errorMessage = response.message || "Unable to verify. Please try again.";
             }
         } catch (error: any) {
             errorMessage = error.message || "Unable to verify name. Please try again.";

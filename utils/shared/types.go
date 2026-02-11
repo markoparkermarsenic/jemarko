@@ -35,6 +35,7 @@ type RSVPRequest struct {
 	IsAttending     bool     `json:"isAttending"`
 	AttendingGuests []string `json:"attendingGuests,omitempty"`
 	Diet            string   `json:"diet,omitempty"`
+	Verified        bool     `json:"verified,omitempty"`
 }
 
 // RSVPResponse represents an RSVP submission response

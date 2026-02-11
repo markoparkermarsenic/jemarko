@@ -40,8 +40,8 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fetch all RSVPs from Supabase using REST API
-	apiURL := fmt.Sprintf("%s/rest/v1/rsvps?select=avatar_data&is_attending=eq.true", os.Getenv("SUPABASE_URL"))
+	// Fetch all RSVPs from Supabase using REST API - only verified and attending guests
+	apiURL := fmt.Sprintf("%s/rest/v1/rsvps?select=avatar_data&is_attending=eq.true&verified=eq.true", os.Getenv("SUPABASE_URL"))
 
 	req, err := http.NewRequest("GET", apiURL, nil)
 	if err != nil {
