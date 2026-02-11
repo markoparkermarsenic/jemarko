@@ -1,5 +1,6 @@
 {
   "dependencies": {
-    "@sveltejs/adapter-vercel": "^6.2.0"
+    "@sveltejs/adapter-vercel": "^6.2.0",
+    "vercel": "^50.15.1"
   }
 }
