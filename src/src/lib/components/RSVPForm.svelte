@@ -144,7 +144,7 @@
                     type="text"
                     id="name"
                     bind:value={nameInput}
-                    placeholder="Enter your full name as on invitation"
+                    placeholder="Enter your first name and surname!"
                     disabled={isLoading}
                 />
             </div>
