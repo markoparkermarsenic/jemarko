@@ -111,7 +111,7 @@
         position: fixed;
         top: var(--spacing-md);
         right: var(--spacing-md);
-        z-index: 100;
+        z-index: 1001; /* Above speech bubbles (1000) */
         font-family: var(--font-mimko);
         font-size: 0.9rem;
         padding: var(--spacing-sm) var(--spacing-md);
@@ -247,7 +247,7 @@
         padding: var(--spacing-xl) var(--spacing-2xl);
         border-radius: 20px;
         position: relative;
-        z-index: 0; /* Behind avatars */
+        z-index: -1; /* Behind avatars and messages */
         border: none;
         background: transparent;
         box-shadow: none;

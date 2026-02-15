@@ -284,6 +284,7 @@
             class="avatar"
             class:flip={avatar.direction === "left"}
             class:has-message={!!avatar.message}
+            class:showing-message={avatar.showMessage}
             style="left: {avatar.x}px; top: {avatar.y}px;"
             onclick={(e) => {
                 e.stopPropagation();
@@ -335,6 +336,10 @@
         cursor: pointer;
     }
 
+    .avatar.showing-message {
+        z-index: 999; /* Higher than other avatars when showing message */
+    }
+
     .avatar.has-message:hover .avatar-image {
         transform: scale(1.1);
     }
@@ -356,14 +361,13 @@
 
     .avatar-name {
         font-family: var(--font-display);
-        font-size: 0.75rem;
+        font-size: 0.6rem;
         color: var(--color-text);
         background: var(--color-white);
         padding: 2px 8px;
         border-radius: 10px;
         margin-top: 4px;
         white-space: nowrap;
-        border: 1px solid var(--color-border);
     }
 
     .speech-bubble {
@@ -372,6 +376,7 @@
         left: 50%;
         transform: translateX(-50%);
         margin-bottom: 12px;
+        z-index: 1000; /* Ensure speech bubbles appear above all avatars */
         animation: 
             fadeIn 0.3s ease forwards,
             wobble var(--anim-duration, 1s) ease-in-out var(--anim-delay, 0s) infinite;
@@ -379,28 +384,15 @@
 
     .message {
         display: block;
-        background: white;
+        background: white; /* Solid white background */
         padding: 10px 14px;
         font-size: 0.75rem;
         max-width: 150px;
         text-align: center;
         position: relative;
         /* Fuzzy hand-drawn border effect */
-        border: 2px solid transparent;
+        border: 2px solid #333;
         border-radius: 16px;
-        background: 
-            linear-gradient(white, white) padding-box,
-            linear-gradient(
-                calc(var(--border-seed, 0.5) * 360deg),
-                #333 0%,
-                #555 25%,
-                #333 50%,
-                #444 75%,
-                #333 100%
-            ) border-box;
-        box-shadow: 
-            0 0 0 1px rgba(0, 0, 0, 0.1),
-            inset 0 0 0 1px rgba(0, 0, 0, 0.05);
         filter: url(#fuzzy-border);
         animation: borderDraw var(--anim-duration, 1s) ease-out forwards;
     }
