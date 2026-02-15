@@ -384,7 +384,7 @@
 
     .message {
         display: block;
-        background: white; /* Solid white background */
+        background: #ffffff; /* Solid white background */
         padding: 10px 14px;
         font-size: 0.75rem;
         max-width: 150px;
@@ -395,6 +395,19 @@
         border-radius: 16px;
         filter: url(#fuzzy-border);
         animation: borderDraw var(--anim-duration, 1s) ease-out forwards;
+        /* Ensure solid background */
+        background-clip: padding-box;
+        -webkit-background-clip: padding-box;
+    }
+    
+    /* Add a white backdrop layer underneath the message */
+    .message::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background: #ffffff;
+        border-radius: 16px;
+        z-index: -1;
     }
 
     .bubble-tail {
