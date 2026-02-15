@@ -291,6 +291,8 @@
                 handleAvatarClick(avatar.id);
             }}
         >
+            <img src={avatar.image} alt={avatar.name} class="avatar-image" />
+            <span class="avatar-name">{avatar.name}</span>
             {#if avatar.showMessage && avatar.message}
                 <div 
                     class="speech-bubble"
@@ -300,8 +302,6 @@
                     <div class="bubble-tail"></div>
                 </div>
             {/if}
-            <img src={avatar.image} alt={avatar.name} class="avatar-image" />
-            <span class="avatar-name">{avatar.name}</span>
         </div>
     {/each}
 </div>
