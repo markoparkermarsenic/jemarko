@@ -49,6 +49,14 @@
     {
       "source": "/api/admin-dashboard",
       "destination": "/api/admin-dashboard.go"
+    },
+    {
+      "source": "/api/admin-add-guest",
+      "destination": "/api/admin-add-guest.go"
+    },
+    {
+      "source": "/api/admin-set-rsvp",
+      "destination": "/api/admin-set-rsvp.go"
     }
   ]
 }

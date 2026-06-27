@@ -69,6 +69,74 @@
     let rsvpFilter = $state<'all' | 'attending' | 'not_attending' | 'no_response'>('all');
     let searchQuery = $state('');
 
+    // Per-row RSVP saving state: guestName → true while in-flight
+    let savingRSVP = $state<Record<string, boolean>>({});
+
+    // Toast notification after setting RSVP
+    interface Toast { id: number; message: string; type: 'success' | 'error'; }
+    let toasts = $state<Toast[]>([]);
+    let toastCounter = 0;
+
+    function showToast(message: string, type: 'success' | 'error' = 'success') {
+        const id = ++toastCounter;
+        toasts = [...toasts, { id, message, type }];
+        setTimeout(() => { toasts = toasts.filter(t => t.id !== id); }, 3500);
+    }
+
+    async function handleSetRSVP(guestName: string, status: 'attending' | 'not_attending' | 'no_response') {
+        savingRSVP = { ...savingRSVP, [guestName]: true };
+
+        // Optimistic update — immediately reflect the change in the UI
+        if (dashboard) {
+            dashboard = {
+                ...dashboard,
+                guestGroups: dashboard.guestGroups.map(group => ({
+                    ...group,
+                    members: group.members.map(m =>
+                        m.name === guestName ? { ...m, rsvpStatus: status, verified: true } : m
+                    )
+                }))
+            };
+        }
+
+        try {
+            const res = await fetch('/api/admin-set-rsvp', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ guestName, status })
+            });
+            if (res.status === 401) {
+                view = 'login';
+                loginError = 'Session expired — please log in again.';
+                return;
+            }
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                showToast(data.message || 'Failed to update status.', 'error');
+                // Revert by reloading
+                await loadDashboard();
+            } else {
+                showToast(data.message);
+            }
+        } catch {
+            showToast('Network error — could not update status.', 'error');
+            await loadDashboard();
+        }
+
+        savingRSVP = { ...savingRSVP, [guestName]: false };
+    }
+
+    // Add guest modal
+    let showAddGuest = $state(false);
+    let addGuestName = $state('');
+    let addGuestAddress = $state('');
+    let addGuestLoading = $state(false);
+    let addGuestError = $state('');
+    let addGuestSuccess = $state('');
+
     // ── Derived ────────────────────────────────────────────────────────────
     let filteredGroups = $derived.by(() => {
         if (!dashboard) return [];
@@ -166,6 +234,61 @@
         loginError = '';
         view = 'login';
     }
+
+    function openAddGuest() {
+        addGuestName = '';
+        addGuestAddress = '';
+        addGuestError = '';
+        addGuestSuccess = '';
+        showAddGuest = true;
+    }
+
+    function closeAddGuest() {
+        showAddGuest = false;
+        addGuestError = '';
+        addGuestSuccess = '';
+    }
+
+    async function handleAddGuest() {
+        addGuestError = '';
+        addGuestSuccess = '';
+        if (!addGuestName.trim()) {
+            addGuestError = 'Name is required.';
+            return;
+        }
+        addGuestLoading = true;
+        try {
+            const res = await fetch('/api/admin-add-guest', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                    name: addGuestName.trim(),
+                    address: addGuestAddress.trim()
+                })
+            });
+            const data = await res.json();
+            if (res.status === 401) {
+                view = 'login';
+                loginError = 'Session expired — please log in again.';
+                return;
+            }
+            if (!res.ok || !data.success) {
+                addGuestError = data.message || 'Failed to add guest.';
+            } else {
+                addGuestSuccess = data.message;
+                addGuestName = '';
+                addGuestAddress = '';
+                // Refresh dashboard so new guest appears immediately
+                await loadDashboard();
+            }
+        } catch {
+            addGuestError = 'Network error — please try again.';
+        }
+        addGuestLoading = false;
+    }
 </script>
 
 <svelte:head>
@@ -207,12 +330,75 @@
             <h1 class="topbar-title">Admin Dashboard</h1>
         </div>
         <div class="topbar-right">
+            <button class="add-guest-btn" onclick={openAddGuest}>+ Add Guest</button>
             <button class="refresh-btn" onclick={loadDashboard} disabled={dashboardLoading}>
                 {dashboardLoading ? '↻ Loading…' : '↻ Refresh'}
             </button>
             <button class="logout-btn" onclick={handleLogout}>Sign Out</button>
         </div>
     </header>
+
+    {#if showAddGuest}
+    <!-- ── Add Guest Modal ─────────────────────────────────────────── -->
+    <div class="modal-backdrop" role="presentation" onclick={(e: MouseEvent) => { if (e.target === e.currentTarget) closeAddGuest(); }}>
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">Add Guest</h2>
+                <button class="modal-close" onclick={closeAddGuest} aria-label="Close">✕</button>
+            </div>
+            <div class="modal-body">
+                <p class="modal-hint">
+                    Add a new guest to the invite list so they can RSVP on the site.
+                    Guests with the <strong>same address</strong> are grouped as a household.
+                </p>
+
+                <form onsubmit={(e) => { e.preventDefault(); handleAddGuest(); }}>
+                    <div class="modal-field">
+                        <label for="ag-name">Full Name <span class="required">*</span></label>
+                        <input
+                            id="ag-name"
+                            type="text"
+                            bind:value={addGuestName}
+                            placeholder="e.g. Jane Smith"
+                            disabled={addGuestLoading}
+                            autocomplete="off"
+                        />
+                    </div>
+                    <div class="modal-field">
+                        <label for="ag-address">Address <span class="optional">(optional)</span></label>
+                        <input
+                            id="ag-address"
+                            type="text"
+                            bind:value={addGuestAddress}
+                            placeholder="e.g. 12 Oak Avenue, London"
+                            disabled={addGuestLoading}
+                            autocomplete="off"
+                        />
+                        <span class="field-hint">Guests sharing an address can RSVP together as a group</span>
+                    </div>
+
+                    {#if addGuestError}
+                        <p class="modal-error">{addGuestError}</p>
+                    {/if}
+                    {#if addGuestSuccess}
+                        <p class="modal-success">✓ {addGuestSuccess}</p>
+                    {/if}
+
+                    <div class="modal-actions">
+                        <button type="button" class="modal-cancel-btn" onclick={closeAddGuest} disabled={addGuestLoading}>
+                            {addGuestSuccess ? 'Close' : 'Cancel'}
+                        </button>
+                        {#if !addGuestSuccess}
+                        <button type="submit" class="modal-submit-btn" disabled={addGuestLoading}>
+                            {addGuestLoading ? 'Adding…' : 'Add Guest'}
+                        </button>
+                        {/if}
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {/if}
 
     {#if dashboardLoading && !dashboard}
         <div class="loading-state"><p>Loading dashboard data…</p></div>
@@ -299,10 +485,11 @@
                             {/if}
                             <table class="members-table">
                                 <thead>
-                                    <tr><th>Name</th><th>Status</th><th>Verified</th></tr>
+                                    <tr><th>Name</th><th>Status</th><th>Verified</th><th>Override</th></tr>
                                 </thead>
                                 <tbody>
                                     {#each group.members as member}
+                                        {@const saving = savingRSVP[member.name] === true}
                                         <tr class="member-row member-row--{member.rsvpStatus}">
                                             <td class="member-name">{member.name}</td>
                                             <td>
@@ -317,6 +504,29 @@
                                                     <span class="unverified-badge">⚠ Pending</span>
                                                 {:else}
                                                     <span class="na-text">—</span>
+                                                {/if}
+                                            </td>
+                                            <td class="override-cell">
+                                                {#if saving}
+                                                    <span class="saving-indicator">Saving…</span>
+                                                {:else}
+                                                    <div class="override-btns">
+                                                        <button
+                                                            class="override-btn override-attending {member.rsvpStatus === 'attending' ? 'override-current' : ''}"
+                                                            onclick={() => handleSetRSVP(member.name, 'attending')}
+                                                            disabled={member.rsvpStatus === 'attending'}
+                                                            title="Mark as attending">✅</button>
+                                                        <button
+                                                            class="override-btn override-declining {member.rsvpStatus === 'not_attending' ? 'override-current' : ''}"
+                                                            onclick={() => handleSetRSVP(member.name, 'not_attending')}
+                                                            disabled={member.rsvpStatus === 'not_attending'}
+                                                            title="Mark as not attending">❌</button>
+                                                        <button
+                                                            class="override-btn override-reset {member.rsvpStatus === 'no_response' ? 'override-current' : ''}"
+                                                            onclick={() => handleSetRSVP(member.name, 'no_response')}
+                                                            disabled={member.rsvpStatus === 'no_response'}
+                                                            title="Reset to no response">⏳</button>
+                                                    </div>
                                                 {/if}
                                             </td>
                                         </tr>
@@ -413,11 +623,16 @@
 </div>
 {/if}
 
+<!-- ── Toast notifications ──────────────────────────────────────────── -->
+{#if toasts.length > 0}
+<div class="toast-stack">
+    {#each toasts as toast (toast.id)}
+        <div class="toast toast--{toast.type}">{toast.message}</div>
+    {/each}
+</div>
+{/if}
 
 <style>
-    /* ── Global resets for this page ──────────────────────────────────── */
-    :global(body) { background: #f5f5f5; }
-
     /* ══════════════════════════════════════════════════════════════════ */
     /*  LOGIN PAGE                                                        */
     /* ══════════════════════════════════════════════════════════════════ */
@@ -720,6 +935,180 @@
     .unverified-row   { display: flex; gap: var(--spacing-md); font-size: 0.9rem; }
     .u-label { font-weight: 600; min-width: 70px; color: var(--color-text-light); }
 
+    /* Add Guest button */
+    .add-guest-btn {
+        font-family: var(--font-mimko);
+        font-size: 0.9rem;
+        padding: var(--spacing-xs) var(--spacing-md);
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-md);
+        background: var(--color-text);
+        color: var(--color-white);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+        font-weight: 600;
+    }
+    .add-guest-btn:hover { opacity: 0.85; }
+
+    /* ── Modal ────────────────────────────────────────────────────────── */
+    .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.45);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 200;
+        padding: var(--spacing-lg);
+    }
+
+    .modal {
+        background: var(--color-white);
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-lg);
+        width: 100%;
+        max-width: 480px;
+        box-shadow: var(--shadow-lg);
+        animation: fadeIn 0.15s ease;
+    }
+
+    .modal-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: var(--spacing-lg) var(--spacing-xl);
+        border-bottom: 2px solid var(--color-border-light);
+    }
+
+    .modal-title {
+        font-family: var(--font-display);
+        font-size: 1.4rem;
+        margin: 0;
+    }
+
+    .modal-close {
+        background: none;
+        border: none;
+        font-size: 1.2rem;
+        cursor: pointer;
+        color: var(--color-text-light);
+        padding: var(--spacing-xs);
+        line-height: 1;
+        transition: color var(--transition-fast);
+    }
+    .modal-close:hover { color: var(--color-text); }
+
+    .modal-body {
+        padding: var(--spacing-xl);
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-lg);
+    }
+
+    .modal-hint {
+        font-family: var(--font-body);
+        font-size: 0.875rem;
+        color: var(--color-text-light);
+        background: var(--color-background-alt);
+        border-radius: var(--radius-md);
+        padding: var(--spacing-sm) var(--spacing-md);
+        margin: 0;
+        line-height: 1.5;
+    }
+
+    .modal-field {
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-xs);
+    }
+
+    .modal-field label {
+        font-family: var(--font-body);
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: var(--color-text);
+    }
+
+    .modal-field input {
+        font-family: var(--font-body);
+        font-size: 1rem;
+        padding: var(--spacing-sm) var(--spacing-md);
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-md);
+        background: var(--color-white);
+        color: var(--color-text);
+        width: 100%;
+        transition: box-shadow var(--transition-fast);
+    }
+    .modal-field input:focus { outline: none; box-shadow: 0 0 0 3px rgba(0,0,0,0.1); }
+    .modal-field input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+    .required { color: #c00; }
+    .optional { font-weight: 400; color: var(--color-text-light); font-size: 0.8rem; }
+
+    .field-hint {
+        font-size: 0.78rem;
+        color: var(--color-text-light);
+        font-family: var(--font-body);
+    }
+
+    .modal-error {
+        font-family: var(--font-body);
+        font-size: 0.875rem;
+        color: #c00;
+        background: #fff0f0;
+        border: 1px solid #fcc;
+        border-radius: var(--radius-sm);
+        padding: var(--spacing-sm) var(--spacing-md);
+        margin: 0;
+    }
+
+    .modal-success {
+        font-family: var(--font-body);
+        font-size: 0.875rem;
+        color: #065f46;
+        background: #d1fae5;
+        border: 1px solid #6ee7b7;
+        border-radius: var(--radius-sm);
+        padding: var(--spacing-sm) var(--spacing-md);
+        margin: 0;
+    }
+
+    .modal-actions {
+        display: flex;
+        gap: var(--spacing-md);
+        justify-content: flex-end;
+        padding-top: var(--spacing-sm);
+    }
+
+    .modal-cancel-btn {
+        font-family: var(--font-body);
+        font-size: 0.9rem;
+        padding: var(--spacing-sm) var(--spacing-lg);
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-md);
+        background: var(--color-white);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+    .modal-cancel-btn:hover:not(:disabled) { background: var(--color-background-alt); }
+    .modal-cancel-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .modal-submit-btn {
+        font-family: var(--font-mimko);
+        font-size: 0.95rem;
+        font-weight: 600;
+        padding: var(--spacing-sm) var(--spacing-xl);
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-md);
+        background: var(--color-text);
+        color: var(--color-white);
+        cursor: pointer;
+        transition: opacity var(--transition-fast);
+    }
+    .modal-submit-btn:hover:not(:disabled) { opacity: 0.85; }
+    .modal-submit-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
     /* Responsive */
     @media (max-width: 640px) {
         .topbar { padding: var(--spacing-sm) var(--spacing-md); }
@@ -734,6 +1123,89 @@
         .dietary-table th, .dietary-table td { padding: var(--spacing-sm) var(--spacing-md); }
         .dietary-email { display: none; }
         .filter-pills { gap: 4px; }
+        .override-btns { gap: 2px; }
+    }
+
+    /* ── Override / set-status column ─────────────────────────────────── */
+    .override-cell { white-space: nowrap; }
+
+    .override-btns {
+        display: flex;
+        gap: var(--spacing-xs);
+        align-items: center;
+    }
+
+    .override-btn {
+        background: var(--color-white);
+        border: 1.5px solid var(--color-border-light);
+        border-radius: var(--radius-sm);
+        padding: 3px 7px;
+        font-size: 0.95rem;
+        cursor: pointer;
+        line-height: 1;
+        transition: all var(--transition-fast);
+        opacity: 0.55;
+    }
+    .override-btn:hover:not(:disabled) {
+        opacity: 1;
+        border-color: var(--color-border);
+        transform: scale(1.15);
+    }
+    .override-btn:disabled {
+        cursor: default;
+        opacity: 1;
+        border-color: var(--color-border);
+        box-shadow: 0 0 0 2px rgba(0,0,0,0.15);
+    }
+    .override-current {
+        opacity: 1;
+        border-color: var(--color-border);
+    }
+
+    .saving-indicator {
+        font-size: 0.78rem;
+        color: var(--color-text-light);
+        font-style: italic;
+        font-family: var(--font-body);
+    }
+
+    /* ── Toast stack ───────────────────────────────────────────────────── */
+    .toast-stack {
+        position: fixed;
+        bottom: var(--spacing-xl);
+        right: var(--spacing-xl);
+        display: flex;
+        flex-direction: column;
+        gap: var(--spacing-sm);
+        z-index: 300;
+        pointer-events: none;
+    }
+
+    .toast {
+        font-family: var(--font-body);
+        font-size: 0.875rem;
+        padding: var(--spacing-sm) var(--spacing-lg);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-lg);
+        max-width: 320px;
+        animation: slideInRight 0.2s ease;
+    }
+
+    .toast--success {
+        background: #065f46;
+        color: #fff;
+        border: 1.5px solid #059669;
+    }
+
+    .toast--error {
+        background: #991b1b;
+        color: #fff;
+        border: 1.5px solid #dc2626;
+    }
+
+    @keyframes slideInRight {
+        from { opacity: 0; transform: translateX(20px); }
+        to   { opacity: 1; transform: translateX(0); }
     }
 </style>
 
