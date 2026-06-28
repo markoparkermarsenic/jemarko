@@ -142,6 +142,9 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Returning %d unique avatars from RSVPs", len(avatars))
 
+	// Cache the response: 60s browser cache, 120s CDN cache, stale-while-revalidate 60s
+	w.Header().Set("Cache-Control", "public, max-age=60, s-maxage=120, stale-while-revalidate=60")
+
 	// Send success response
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(shared.GetAvatarsResponse{

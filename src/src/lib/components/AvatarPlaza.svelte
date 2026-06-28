@@ -21,18 +21,38 @@
         speed: number;
         showMessage: boolean;
         direction: "left" | "right";
-        // Animation variation parameters for fuzzy border
         animDuration: number;
         animDelay: number;
         borderSeed: number;
+        // DOM element ref — used to move the bird without touching Svelte state
+        el?: HTMLDivElement;
     }
 
+    // avatars drives the Svelte template (for mounting/unmounting birds).
+    // Position updates bypass reactivity entirely — see rafLoop below.
     let avatars = $state<Avatar[]>([]);
-    let userInteractionActive = $state(false); // Pause random messages when user clicks
+    let userInteractionActive = $state(false);
 
-    let containerWidth = $state(0);
-    let containerHeight = $state(0);
+    let containerWidth = 800;
+    let containerHeight = 600;
     let container: HTMLDivElement;
+
+    // ── Hot-path data ─────────────────────────────────────────────────────
+    // These plain arrays/objects are read 60× per second inside rafTick.
+    // They MUST NOT be Svelte proxies — any proxy read inside a tight loop
+    // costs ~3× vs a plain property access due to the proxy trap overhead.
+
+    // Per-bird position state — plain object, never proxied
+    const pos: Record<string, {
+        x: number; y: number;
+        targetX: number; targetY: number;
+        speed: number; direction: "left" | "right";
+    }> = {};
+
+    // Flat array of { id, el } — rebuilt only when birds are added/removed
+    // rafTick reads this instead of the $state proxy array
+    let rafBirds: Array<{ id: string; el: HTMLDivElement }> = [];
+
 
     // Function to fetch and merge avatars while preserving existing positions
     async function fetchAvatars() {
@@ -56,20 +76,29 @@
                         };
                     }
                     
-                    // New avatar - create with random position
+                    // New avatar — initialise pos entry and create avatar record
+                    const id = `${guestAvatar.name}-${Date.now()}`;
+                    const startX = getRandomPosition(containerWidth);
+                    const startY = getRandomPosition(containerHeight);
+                    pos[id] = {
+                        x: startX, y: startY,
+                        targetX: getRandomPosition(containerWidth),
+                        targetY: getRandomPosition(containerHeight),
+                        speed: 0.3 + Math.random() * 0.5,
+                        direction: Math.random() > 0.5 ? "right" : "left",
+                    };
                     return {
-                        id: `${guestAvatar.name}-${Date.now()}`,
+                        id,
                         name: guestAvatar.name,
                         image: `/birds/${guestAvatar.avatar}.png`,
                         message: guestAvatar.message || undefined,
-                        x: getRandomPosition(containerWidth || 800),
-                        y: getRandomPosition(containerHeight || 600),
-                        targetX: getRandomPosition(containerWidth || 800),
-                        targetY: getRandomPosition(containerHeight || 600),
+                        // x/y on the avatar object are only used for initial Svelte render;
+                        // the rAF loop takes over from there via pos[id]
+                        x: startX, y: startY,
+                        targetX: startX, targetY: startY,
                         speed: 0.3 + Math.random() * 0.5,
                         showMessage: false,
                         direction: Math.random() > 0.5 ? "right" : "left" as "left" | "right",
-                        // Random animation parameters for unique fuzzy border effect
                         animDuration: 0.8 + Math.random() * 0.6,
                         animDelay: Math.random() * 0.3,
                         borderSeed: Math.random(),
@@ -93,43 +122,66 @@
         return Math.random() * (max - margin * 2) + margin;
     }
 
-    function updateAvatarTargets() {
-        avatars = avatars.map((avatar) => {
-            // If close to target, set new target
-            const dx = avatar.targetX - avatar.x;
-            const dy = avatar.targetY - avatar.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
+    // ── rafTick — the only code that runs at 60fps ────────────────────────
+    // Reads from rafBirds (plain array, not a Svelte proxy) and pos (plain object).
+    // Zero allocations in the hot path: no string templates, no map/filter, no
+    // array spreads. At 160 birds @ 60fps this runs ~9,600 iterations/sec.
+    function rafTick() {
+        const W = containerWidth;
+        const H = containerHeight;
+        const margin = 80;
+        const wRange = W - margin * 2;
+        const hRange = H - margin * 2;
 
-            if (distance < 10) {
-                return {
-                    ...avatar,
-                    targetX: getRandomPosition(containerWidth),
-                    targetY: getRandomPosition(containerHeight),
-                };
+        for (let i = 0; i < rafBirds.length; i++) {
+            const bird = rafBirds[i];
+            const p = pos[bird.id];
+            if (!p) continue;
+
+            const dx = p.targetX - p.x;
+            const dy = p.targetY - p.y;
+            // Avoid sqrt when close — just pick a new target
+            const distSq = dx * dx + dy * dy;
+
+            if (distSq > 1) {
+                const invDist = p.speed / Math.sqrt(distSq);
+                p.x += dx * invDist;
+                p.y += dy * invDist;
+
+                const goingLeft = dx < 0;
+                if (goingLeft !== (p.direction === "left")) {
+                    p.direction = goingLeft ? "left" : "right";
+                    if (goingLeft) {
+                        bird.el.classList.add("flip");
+                    } else {
+                        bird.el.classList.remove("flip");
+                    }
+                }
+            } else {
+                p.targetX = Math.random() * wRange + margin;
+                p.targetY = Math.random() * hRange + margin;
             }
-            return avatar;
-        });
+
+            // Direct style property writes — faster than template literal + transform
+            bird.el.style.left = p.x + "px";
+            bird.el.style.top  = p.y + "px";
+        }
     }
 
-    function moveAvatars() {
-        avatars = avatars.map((avatar) => {
-            const dx = avatar.targetX - avatar.x;
-            const dy = avatar.targetY - avatar.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            if (distance > 1) {
-                const newX = avatar.x + (dx / distance) * avatar.speed;
-                const newY = avatar.y + (dy / distance) * avatar.speed;
-                return {
-                    ...avatar,
-                    x: newX,
-                    y: newY,
-                    direction: dx > 0 ? "right" : "left",
-                };
-            }
-            return avatar;
+    // Rebuild the plain rafBirds array whenever the Svelte avatars list changes.
+    // This runs at most once per fetch (not per frame).
+    // We use $effect so it fires after the DOM has settled (bind:this populated).
+    $effect(() => {
+        // Read avatars.length to subscribe; then snapshot into a plain array
+        // using a microtask so all bind:this refs are guaranteed to be set.
+        const _ = avatars.length;
+        void 0; // silence unused warning
+        queueMicrotask(() => {
+            rafBirds = avatars
+                .filter(a => a.el != null)
+                .map(a => ({ id: a.id, el: a.el as HTMLDivElement }));
         });
-    }
+    });
 
     const MAX_VISIBLE_MESSAGES = 3;
 
@@ -234,22 +286,30 @@
     }
 
     onMount(() => {
-        // Initialize container dimensions
         if (container) {
             containerWidth = container.offsetWidth;
             containerHeight = container.offsetHeight;
         }
 
-        // Animation loop
-        const moveInterval = setInterval(() => {
-            moveAvatars();
-            updateAvatarTargets();
-        }, 50);
+        // rAF animation loop — smooth 60fps, zero Svelte reactive overhead
+        let rafId: number;
+        let lastMessageTime = 0;
+        const MESSAGE_INTERVAL_MS = 5000;
 
-        // Show messages periodically
-        const messageInterval = setInterval(toggleRandomMessage, 5000);
+        function loop(timestamp: number) {
+            rafTick();
 
-        // Handle resize
+            // Fire message logic at the same cadence as the old setInterval
+            if (timestamp - lastMessageTime >= MESSAGE_INTERVAL_MS) {
+                lastMessageTime = timestamp;
+                toggleRandomMessage();
+            }
+
+            rafId = requestAnimationFrame(loop);
+        }
+
+        rafId = requestAnimationFrame(loop);
+
         const handleResize = () => {
             if (container) {
                 containerWidth = container.offsetWidth;
@@ -259,8 +319,7 @@
         window.addEventListener("resize", handleResize);
 
         return () => {
-            clearInterval(moveInterval);
-            clearInterval(messageInterval);
+            cancelAnimationFrame(rafId);
             window.removeEventListener("resize", handleResize);
         };
     });
@@ -285,7 +344,8 @@
             class:flip={avatar.direction === "left"}
             class:has-message={!!avatar.message}
             class:showing-message={avatar.showMessage}
-            style="left: {avatar.x}px; top: {avatar.y}px;"
+            style="left:0;top:0;will-change:left,top;"
+            bind:this={avatar.el}
             onclick={(e) => {
                 e.stopPropagation();
                 handleAvatarClick(avatar.id);
