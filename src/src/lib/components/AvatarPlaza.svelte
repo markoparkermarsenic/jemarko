@@ -9,27 +9,19 @@
 
     let { refreshTrigger = 0 }: Props = $props();
 
+    // Avatar data used only by Svelte for rendering (image, name, showMessage).
+    // Position is never stored here — it lives in the plain `pos` map below.
     interface Avatar {
         id: string;
         name: string;
         image: string;
         message?: string;
-        x: number;
-        y: number;
-        targetX: number;
-        targetY: number;
-        speed: number;
         showMessage: boolean;
-        direction: "left" | "right";
         animDuration: number;
         animDelay: number;
-        borderSeed: number;
-        // DOM element ref — used to move the bird without touching Svelte state
-        el?: HTMLDivElement;
     }
 
-    // avatars drives the Svelte template (for mounting/unmounting birds).
-    // Position updates bypass reactivity entirely — see rafLoop below.
+    // Svelte reactive state — drives the template. Never touched in rafTick.
     let avatars = $state<Avatar[]>([]);
     let userInteractionActive = $state(false);
 
@@ -37,21 +29,44 @@
     let containerHeight = 600;
     let container: HTMLDivElement;
 
-    // ── Hot-path data ─────────────────────────────────────────────────────
-    // These plain arrays/objects are read 60× per second inside rafTick.
-    // They MUST NOT be Svelte proxies — any proxy read inside a tight loop
-    // costs ~3× vs a plain property access due to the proxy trap overhead.
+    // ── Hot-path data: plain JS, never proxied ────────────────────────────
 
-    // Per-bird position state — plain object, never proxied
+    // Per-bird position + direction state
     const pos: Record<string, {
         x: number; y: number;
         targetX: number; targetY: number;
         speed: number; direction: "left" | "right";
     }> = {};
 
-    // Flat array of { id, el } — rebuilt only when birds are added/removed
-    // rafTick reads this instead of the $state proxy array
+    // A plain Map from avatar id → its DOM element.
+    // Populated via the `registerBird` Svelte action (use:registerBird).
+    // This is the reliable, proxy-free way to collect DOM refs in Svelte 5.
+    const birdEls = new Map<string, HTMLDivElement>();
+
+    // Flat snapshot used by rafTick — rebuilt in O(n) only when birds change.
     let rafBirds: Array<{ id: string; el: HTMLDivElement }> = [];
+
+    // Called by the `use:registerBird` action on each bird element.
+    // Runs synchronously after the element is mounted, before any rAF tick.
+    function registerBird(el: HTMLDivElement, id: string) {
+        birdEls.set(id, el);
+        // Rebuild the hot-path array immediately — no microtask needed
+        rebuildRafBirds();
+        return {
+            destroy() {
+                birdEls.delete(id);
+                rebuildRafBirds();
+            }
+        };
+    }
+
+    function rebuildRafBirds() {
+        const next: Array<{ id: string; el: HTMLDivElement }> = [];
+        for (const [id, el] of birdEls) {
+            next.push({ id, el });
+        }
+        rafBirds = next;
+    }
 
 
     // Function to fetch and merge avatars while preserving existing positions
@@ -92,16 +107,9 @@
                         name: guestAvatar.name,
                         image: `/birds/${guestAvatar.avatar}.png`,
                         message: guestAvatar.message || undefined,
-                        // x/y on the avatar object are only used for initial Svelte render;
-                        // the rAF loop takes over from there via pos[id]
-                        x: startX, y: startY,
-                        targetX: startX, targetY: startY,
-                        speed: 0.3 + Math.random() * 0.5,
                         showMessage: false,
-                        direction: Math.random() > 0.5 ? "right" : "left" as "left" | "right",
                         animDuration: 0.8 + Math.random() * 0.6,
                         animDelay: Math.random() * 0.3,
-                        borderSeed: Math.random(),
                     };
                 });
                 avatars = mergedAvatars;
@@ -167,21 +175,6 @@
             bird.el.style.top  = p.y + "px";
         }
     }
-
-    // Rebuild the plain rafBirds array whenever the Svelte avatars list changes.
-    // This runs at most once per fetch (not per frame).
-    // We use $effect so it fires after the DOM has settled (bind:this populated).
-    $effect(() => {
-        // Read avatars.length to subscribe; then snapshot into a plain array
-        // using a microtask so all bind:this refs are guaranteed to be set.
-        const _ = avatars.length;
-        void 0; // silence unused warning
-        queueMicrotask(() => {
-            rafBirds = avatars
-                .filter(a => a.el != null)
-                .map(a => ({ id: a.id, el: a.el as HTMLDivElement }));
-        });
-    });
 
     const MAX_VISIBLE_MESSAGES = 3;
 
@@ -325,27 +318,15 @@
     });
 </script>
 
-<!-- SVG filter for fuzzy/hand-drawn effect -->
-<svg class="svg-filters" aria-hidden="true">
-    <defs>
-        <filter id="fuzzy-border">
-            <feTurbulence type="fractalNoise" baseFrequency="0.04" numOctaves="3" result="noise" />
-            <feDisplacementMap in="SourceGraphic" in2="noise" scale="2" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
-    </defs>
-</svg>
-
 <div class="avatar-plaza" bind:this={container}>
     {#each avatars as avatar (avatar.id)}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             class="avatar"
-            class:flip={avatar.direction === "left"}
             class:has-message={!!avatar.message}
             class:showing-message={avatar.showMessage}
-            style="left:0;top:0;will-change:left,top;"
-            bind:this={avatar.el}
+            use:registerBird={avatar.id}
             onclick={(e) => {
                 e.stopPropagation();
                 handleAvatarClick(avatar.id);
@@ -354,9 +335,9 @@
             <img src={avatar.image} alt={avatar.name} class="avatar-image" />
             <span class="avatar-name">{avatar.name}</span>
             {#if avatar.showMessage && avatar.message}
-                <div 
+                <div
                     class="speech-bubble"
-                    style="--anim-duration: {avatar.animDuration}s; --anim-delay: {avatar.animDelay}s; --border-seed: {avatar.borderSeed};"
+                    style="--anim-duration: {avatar.animDuration}s; --anim-delay: {avatar.animDelay}s;"
                 >
                     <span class="message">{avatar.message}</span>
                     <div class="bubble-tail"></div>
@@ -367,13 +348,6 @@
 </div>
 
 <style>
-    .svg-filters {
-        position: absolute;
-        width: 0;
-        height: 0;
-        overflow: hidden;
-    }
-
     .avatar-plaza {
         position: absolute;
         inset: 0;
@@ -444,30 +418,13 @@
 
     .message {
         display: block;
-        background: #ffffff; /* Solid white background */
+        background: #ffffff;
         padding: 10px 14px;
         font-size: 0.75rem;
         max-width: 150px;
         text-align: center;
-        position: relative;
-        /* Fuzzy hand-drawn border effect */
         border: 2px solid #333;
         border-radius: 16px;
-        filter: url(#fuzzy-border);
-        animation: borderDraw var(--anim-duration, 1s) ease-out forwards;
-        /* Ensure solid background */
-        background-clip: padding-box;
-        -webkit-background-clip: padding-box;
-    }
-    
-    /* Add a white backdrop layer underneath the message */
-    .message::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-        background: #ffffff;
-        border-radius: 16px;
-        z-index: -1;
     }
 
     .bubble-tail {
@@ -480,7 +437,6 @@
         border-left: 8px solid transparent;
         border-right: 8px solid transparent;
         border-top: 10px solid #333;
-        filter: url(#fuzzy-border);
         animation: tailWobble var(--anim-duration, 1s) ease-in-out var(--anim-delay, 0s) infinite;
     }
 
@@ -544,12 +500,4 @@
         }
     }
 
-    @keyframes borderDraw {
-        0% {
-            clip-path: polygon(0 0, 0 0, 0 100%, 0 100%);
-        }
-        100% {
-            clip-path: polygon(0 0, 100% 0, 100% 100%, 0 100%);
-        }
-    }
 </style>
