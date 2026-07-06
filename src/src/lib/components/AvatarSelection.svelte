@@ -98,8 +98,12 @@
             });
 
             if (response.success) {
-                console.log("Avatars saved successfully:", avatars);
-                oncomplete?.();
+                const completed: CompletedAvatar[] = guestAvatars.map((ga) => ({
+                    name: ga.guestName,
+                    avatar: ga.selectedAvatar || "",
+                    message: ga.message,
+                }));
+                oncomplete?.(completed);
             } else {
                 errorMessage = response.message || "Failed to save avatar selections";
             }

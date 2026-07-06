@@ -38,35 +38,35 @@
         speed: number; direction: "left" | "right";
     }> = {};
 
-    // A plain Map from avatar id → its DOM element.
-    // Populated via the `registerBird` Svelte action (use:registerBird).
-    // This is the reliable, proxy-free way to collect DOM refs in Svelte 5.
-    const birdEls = new Map<string, HTMLDivElement>();
-
     // Flat snapshot used by rafTick — rebuilt in O(n) only when birds change.
     let rafBirds: Array<{ id: string; el: HTMLDivElement }> = [];
 
-    // Called by the `use:registerBird` action on each bird element.
-    // Runs synchronously after the element is mounted, before any rAF tick.
-    function registerBird(el: HTMLDivElement, id: string) {
-        birdEls.set(id, el);
-        // Rebuild the hot-path array immediately — no microtask needed
-        rebuildRafBirds();
-        return {
-            destroy() {
-                birdEls.delete(id);
-                rebuildRafBirds();
-            }
-        };
-    }
-
-    function rebuildRafBirds() {
+    // Rebuild rafBirds by querying the DOM directly. Runs inside a $effect so
+    // it fires AFTER Svelte has flushed DOM updates — the elements are
+    // guaranteed to exist. This avoids fragile timing dependencies on
+    // use: actions or bind:this proxy behaviour.
+    $effect(() => {
+        const _ = avatars.length;
+        if (!container) return;
+        const els = container.querySelectorAll<HTMLDivElement>('.avatar[data-bird-id]');
         const next: Array<{ id: string; el: HTMLDivElement }> = [];
-        for (const [id, el] of birdEls) {
+        els.forEach((el) => {
+            const id = el.dataset.birdId;
+            if (!id) return;
+            if (!pos[id]) {
+                pos[id] = {
+                    x: getRandomPosition(containerWidth),
+                    y: getRandomPosition(containerHeight),
+                    targetX: getRandomPosition(containerWidth),
+                    targetY: getRandomPosition(containerHeight),
+                    speed: 0.3 + Math.random() * 0.5,
+                    direction: Math.random() > 0.5 ? 'right' : 'left',
+                };
+            }
             next.push({ id, el });
-        }
+        });
         rafBirds = next;
-    }
+    });
 
 
     // Function to fetch and merge avatars while preserving existing positions
@@ -143,8 +143,17 @@
 
         for (let i = 0; i < rafBirds.length; i++) {
             const bird = rafBirds[i];
-            const p = pos[bird.id];
-            if (!p) continue;
+            let p = pos[bird.id];
+            if (!p) {
+                p = pos[bird.id] = {
+                    x: getRandomPosition(W),
+                    y: getRandomPosition(H),
+                    targetX: getRandomPosition(W),
+                    targetY: getRandomPosition(H),
+                    speed: 0.3 + Math.random() * 0.5,
+                    direction: Math.random() > 0.5 ? 'right' : 'left',
+                };
+            }
 
             const dx = p.targetX - p.x;
             const dy = p.targetY - p.y;
@@ -279,10 +288,16 @@
     }
 
     onMount(() => {
-        if (container) {
-            containerWidth = container.offsetWidth;
-            containerHeight = container.offsetHeight;
-        }
+        const measure = () => {
+            if (container && container.offsetWidth > 0) {
+                containerWidth = container.offsetWidth;
+                containerHeight = container.offsetHeight;
+            } else if (typeof window !== 'undefined') {
+                containerWidth = window.innerWidth;
+                containerHeight = window.innerHeight;
+            }
+        };
+        measure();
 
         // rAF animation loop — smooth 60fps, zero Svelte reactive overhead
         let rafId: number;
@@ -303,12 +318,7 @@
 
         rafId = requestAnimationFrame(loop);
 
-        const handleResize = () => {
-            if (container) {
-                containerWidth = container.offsetWidth;
-                containerHeight = container.offsetHeight;
-            }
-        };
+        const handleResize = () => measure();
         window.addEventListener("resize", handleResize);
 
         return () => {
@@ -326,7 +336,7 @@
             class="avatar"
             class:has-message={!!avatar.message}
             class:showing-message={avatar.showMessage}
-            use:registerBird={avatar.id}
+            data-bird-id={avatar.id}
             onclick={(e) => {
                 e.stopPropagation();
                 handleAvatarClick(avatar.id);
