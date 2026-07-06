@@ -42,6 +42,9 @@
     <!-- Avatar Plaza persists across all views - never recreated -->
     <AvatarPlaza refreshTrigger={avatarRefreshTrigger} />
     
+    <!-- Info page link - always visible -->
+    <a href="/info" class="info-btn">Info ℹ️</a>
+
     <!-- Skip to Plaza button - visible when not in plaza view -->
     {#if currentView !== "plaza-only" && !isRsvpClosed}
         <button class="skip-to-plaza-btn" onclick={goToPlaza}>
@@ -128,6 +131,30 @@
         background-color: var(--color-text);
         color: var(--color-white);
         transform: translateX(4px);
+    }
+
+    .info-btn {
+        position: fixed;
+        top: var(--spacing-md);
+        left: var(--spacing-md);
+        z-index: 1001;
+        font-family: var(--font-mimko);
+        font-size: 0.9rem;
+        padding: var(--spacing-sm) var(--spacing-md);
+        border: 1px solid var(--color-border);
+        background: rgba(255, 255, 255, 0.9);
+        color: var(--color-text);
+        text-decoration: none;
+        transition: all var(--transition-normal);
+        border-radius: var(--radius-md);
+        backdrop-filter: blur(4px);
+    }
+
+    .info-btn:hover {
+        background-color: var(--color-text);
+        color: var(--color-white);
+        opacity: 1;
+        transform: translateX(-4px);
     }
 
     .content-overlay {

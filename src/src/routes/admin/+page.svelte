@@ -4,6 +4,7 @@
         name: string;
         rsvpStatus: 'attending' | 'not_attending' | 'no_response';
         verified: boolean;
+        ceremony: boolean;
     }
 
     interface GuestGroup {
@@ -35,6 +36,7 @@
         noResponse: number;
         withDietary: number;
         unverifiedCount: number;
+        ceremonyAttending: number;
     }
 
     interface DashboardData {
@@ -430,6 +432,10 @@
                 <span class="stat-number">{dashboard.stats.withDietary}</span>
                 <span class="stat-label">Dietary Needs</span>
             </div>
+            <div class="stat-card stat-ceremony">
+                <span class="stat-number">{dashboard.stats.ceremonyAttending}</span>
+                <span class="stat-label">Attending Ceremony</span>
+            </div>
             {#if dashboard.stats.unverifiedCount > 0}
             <div class="stat-card stat-unverified">
                 <span class="stat-number">{dashboard.stats.unverifiedCount}</span>
@@ -485,7 +491,7 @@
                             {/if}
                             <table class="members-table">
                                 <thead>
-                                    <tr><th>Name</th><th>Status</th><th>Verified</th><th>Override</th></tr>
+                                    <tr><th>Name</th><th>Status</th><th>Verified</th><th>Ceremony</th><th>Override</th></tr>
                                 </thead>
                                 <tbody>
                                     {#each group.members as member}
@@ -504,6 +510,13 @@
                                                     <span class="unverified-badge">⚠ Pending</span>
                                                 {:else}
                                                     <span class="na-text">—</span>
+                                                {/if}
+                                            </td>
+                                            <td>
+                                                {#if member.ceremony}
+                                                    <span class="ceremony-badge ceremony-yes">✓ Yes</span>
+                                                {:else}
+                                                    <span class="ceremony-badge ceremony-no">— No</span>
                                                 {/if}
                                             </td>
                                             <td class="override-cell">
@@ -847,6 +860,8 @@
     .stat-pending .stat-number    { color: #b45309; }
     .stat-dietary    { background: #eff6ff; border-color: #1d4ed8; }
     .stat-dietary .stat-number    { color: #1d4ed8; }
+    .stat-ceremony   { background: #f0fdf4; border-color: #15803d; }
+    .stat-ceremony .stat-number   { color: #15803d; }
     .stat-unverified { background: #fff7ed; border-color: #c2410c; }
     .stat-unverified .stat-number { color: #c2410c; }
 
@@ -913,6 +928,9 @@
     .status--no_response   { background: #fef3c7; color: #92400e; }
     .verified-badge   { font-size: 0.8rem; color: #065f46; background: #d1fae5; padding: 2px 8px; border-radius: var(--radius-full); white-space: nowrap; }
     .unverified-badge { font-size: 0.8rem; color: #92400e; background: #fef3c7; padding: 2px 8px; border-radius: var(--radius-full); white-space: nowrap; }
+    .ceremony-badge   { font-size: 0.8rem; padding: 2px 8px; border-radius: var(--radius-full); white-space: nowrap; }
+    .ceremony-yes     { color: #065f46; background: #d1fae5; }
+    .ceremony-no      { color: var(--color-text-light); background: var(--color-background-alt); }
     .na-text { color: var(--color-text-light); }
 
     /* Dietary table */

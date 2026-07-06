@@ -49,6 +49,7 @@ type DashboardGuestMember struct {
 	Name       string `json:"name"`
 	RSVPStatus string `json:"rsvpStatus"` // "attending", "not_attending", "no_response"
 	Verified   bool   `json:"verified"`
+	Ceremony   bool   `json:"ceremony"` // whether the guest is invited to the ceremony
 }
 
 // DashboardGuestGroup represents a family/household group from the invite list
@@ -77,13 +78,14 @@ type DashboardUnverifiedRSVP struct {
 
 // DashboardStats represents summary statistics
 type DashboardStats struct {
-	TotalInvited    int `json:"totalInvited"`
-	TotalRSVPd      int `json:"totalRSVPd"`
-	Attending       int `json:"attending"`
-	NotAttending    int `json:"notAttending"`
-	NoResponse      int `json:"noResponse"`
-	WithDietary     int `json:"withDietary"`
-	UnverifiedCount int `json:"unverifiedCount"`
+	TotalInvited      int `json:"totalInvited"`
+	TotalRSVPd        int `json:"totalRSVPd"`
+	Attending         int `json:"attending"`
+	NotAttending      int `json:"notAttending"`
+	NoResponse        int `json:"noResponse"`
+	WithDietary       int `json:"withDietary"`
+	UnverifiedCount   int `json:"unverifiedCount"`
+	CeremonyAttending int `json:"ceremonyAttending"` // guests invited to the ceremony who are attending
 }
 
 // DashboardResponse is the full admin dashboard payload
@@ -97,9 +99,10 @@ type DashboardResponse struct {
 
 // supabaseGuest matches the DB guests table row
 type supabaseGuest struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Address string `json:"address"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Address  string `json:"address"`
+	Ceremony bool   `json:"ceremony"`
 }
 
 // supabaseRSVP matches the DB rsvps table row
@@ -243,6 +246,7 @@ func buildDashboard(guests []supabaseGuest, rsvps []supabaseRSVP) DashboardRespo
 
 	var guestGroups []DashboardGuestGroup
 	totalInvited, attending, notAttending, noResponse := 0, 0, 0, 0
+	ceremonyAttending := 0
 
 	for _, addrKey := range groupOrder {
 		members := groupMap[addrKey]
@@ -263,6 +267,9 @@ func buildDashboard(guests []supabaseGuest, rsvps []supabaseRSVP) DashboardRespo
 				if res.attending {
 					status = "attending"
 					attending++
+					if g.Ceremony {
+						ceremonyAttending++
+					}
 				} else {
 					status = "not_attending"
 					notAttending++
@@ -283,6 +290,9 @@ func buildDashboard(guests []supabaseGuest, rsvps []supabaseRSVP) DashboardRespo
 				if listedAsAttending {
 					status = "attending"
 					attending++
+					if g.Ceremony {
+						ceremonyAttending++
+					}
 				} else {
 					status = "not_attending"
 					notAttending++
@@ -292,7 +302,7 @@ func buildDashboard(guests []supabaseGuest, rsvps []supabaseRSVP) DashboardRespo
 			}
 
 			groupMembers = append(groupMembers, DashboardGuestMember{
-				Name: g.Name, RSVPStatus: status, Verified: verified,
+				Name: g.Name, RSVPStatus: status, Verified: verified, Ceremony: g.Ceremony,
 			})
 		}
 		guestGroups = append(guestGroups, DashboardGuestGroup{Address: displayAddress, Members: groupMembers})
@@ -304,6 +314,7 @@ func buildDashboard(guests []supabaseGuest, rsvps []supabaseRSVP) DashboardRespo
 			TotalInvited: totalInvited, TotalRSVPd: attending + notAttending,
 			Attending: attending, NotAttending: notAttending, NoResponse: noResponse,
 			WithDietary: len(dietaryEntries), UnverifiedCount: len(unverifiedRSVPs),
+			CeremonyAttending: ceremonyAttending,
 		},
 		GuestGroups: guestGroups, DietaryRequirements: dietaryEntries, UnverifiedRSVPs: unverifiedRSVPs,
 	}
@@ -343,7 +354,7 @@ func addRSVPToAddressMap(addressRSVPMap map[string][]supabaseRSVP, guestAddrMap 
 
 // fetchGuests fetches all guests from Supabase
 func fetchGuests(supabaseURL, apiKey string) ([]supabaseGuest, error) {
-	url := fmt.Sprintf("%s/rest/v1/guests?select=id,name,address&order=address.asc,name.asc", supabaseURL)
+	url := fmt.Sprintf("%s/rest/v1/guests?select=id,name,address,ceremony&order=address.asc,name.asc", supabaseURL)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
@@ -405,4 +416,3 @@ func setCORSHeaders(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 	w.Header().Set("Access-Control-Allow-Credentials", "true")
 }
-

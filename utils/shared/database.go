@@ -23,6 +23,7 @@ type GuestRecord struct {
 	ID        string `json:"id,omitempty"`
 	Name      string `json:"name"`
 	Address   string `json:"address"` // Removed omitempty - always include
+	Ceremony  bool   `json:"ceremony"`
 	CreatedAt string `json:"created_at,omitempty"`
 	Dietary   string `json:"dietary,omitempty"`
 }
@@ -108,9 +109,10 @@ func (db *Database) LoadGuests() ([]Guest, error) {
 	guests := make([]Guest, len(records))
 	for i, record := range records {
 		guests[i] = Guest{
-			ID:      record.ID,
-			Name:    record.Name,
-			Address: record.Address,
+			ID:       record.ID,
+			Name:     record.Name,
+			Address:  record.Address,
+			Ceremony: record.Ceremony,
 		}
 	}
 

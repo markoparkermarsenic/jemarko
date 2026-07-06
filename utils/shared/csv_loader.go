@@ -4,10 +4,38 @@ import (
 	"encoding/csv"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 )
 
-// LoadGuestsFromCSV loads guests from a CSV file
+// normaliseHeader lowercases, trims, and strips trailing "?" so headers like
+// "Address " or "Ceremony?" match reliably regardless of formatting.
+func normaliseHeader(h string) string {
+	h = strings.ToLower(strings.TrimSpace(h))
+	h = strings.TrimSuffix(h, "?")
+	return strings.TrimSpace(h)
+}
+
+// parseBool interprets common truthy/falsy CSV values case-insensitively:
+// true/false, yes/no, y/n, 1/0. Anything unrecognised defaults to false.
+func parseBool(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "true", "yes", "y", "1":
+		return true
+	case "false", "no", "n", "0", "":
+		return false
+	default:
+		if b, err := strconv.ParseBool(strings.TrimSpace(s)); err == nil {
+			return b
+		}
+		return false
+	}
+}
+
+// LoadGuestsFromCSV loads guests from a CSV file. Columns are located by
+// header name (case-insensitive, trims whitespace/trailing "?"), so the
+// CSV can have columns in any order as long as headers include at least
+// "Name". "Address" and "Ceremony" are optional.
 func LoadGuestsFromCSV(filename string) ([]Guest, error) {
 	file, err := os.Open(filename)
 	if err != nil {
@@ -16,6 +44,8 @@ func LoadGuestsFromCSV(filename string) ([]Guest, error) {
 	defer file.Close()
 
 	reader := csv.NewReader(file)
+	// Allow rows with a variable number of fields (defensive against trailing commas)
+	reader.FieldsPerRecord = -1
 	records, err := reader.ReadAll()
 	if err != nil {
 		return nil, err
@@ -25,47 +55,57 @@ func LoadGuestsFromCSV(filename string) ([]Guest, error) {
 		return []Guest{}, nil
 	}
 
-	// Skip header row and parse guests
+	// Build a header → column index map
+	header := records[0]
+	colIndex := make(map[string]int)
+	for i, col := range header {
+		colIndex[normaliseHeader(col)] = i
+	}
+
+	nameIdx, hasName := colIndex["name"]
+	if !hasName {
+		log.Printf("⚠️  CSV missing required 'Name' column header: %v", header)
+		return []Guest{}, nil
+	}
+	addressIdx, hasAddress := colIndex["address"]
+	ceremonyIdx, hasCeremony := colIndex["ceremony"]
+
+	getField := func(record []string, idx int) string {
+		if idx < 0 || idx >= len(record) {
+			return ""
+		}
+		return strings.TrimSpace(record[idx])
+	}
+
 	var guests []Guest
 	idCounter := 1
 
 	for i, record := range records {
-		// Skip header row
 		if i == 0 {
+			continue // skip header row
+		}
+
+		name := getField(record, nameIdx)
+		if name == "" {
 			continue
 		}
 
-		// Ensure we have at least name and address columns
-		if len(record) < 2 {
-			continue
+		address := ""
+		if hasAddress {
+			address = getField(record, addressIdx)
 		}
 
-		name := strings.TrimSpace(record[0])
-		address := strings.TrimSpace(record[1])
-
-		// Skip empty names
-		if name == "" || name == "Name" {
-			continue
+		ceremony := false
+		if hasCeremony {
+			ceremony = parseBool(getField(record, ceremonyIdx))
 		}
 
-		// Keep N/A addresses as-is (don't normalize)
-
-		// Add dietary restrictions if available (column 5)
-		dietary := ""
-		if len(record) > 5 {
-			dietary = strings.TrimSpace(record[5])
-		}
-
-		guest := Guest{
-			ID:      string(rune(idCounter)),
-			Name:    name,
-			Address: address,
-		}
-
-		// Store dietary info in a way that can be used later if needed
-		_ = dietary // For future use
-
-		guests = append(guests, guest)
+		guests = append(guests, Guest{
+			ID:       strconv.Itoa(idCounter),
+			Name:     name,
+			Address:  address,
+			Ceremony: ceremony,
+		})
 		idCounter++
 	}
 

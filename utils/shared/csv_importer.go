@@ -110,8 +110,9 @@ func (db *Database) ImportGuestsToDatabase(guests []Guest) error {
 			address = "" // Ensure empty string, not null
 		}
 		newGuests = append(newGuests, GuestRecord{
-			Name:    guest.Name,
-			Address: address,
+			Name:     guest.Name,
+			Address:  address,
+			Ceremony: guest.Ceremony,
 		})
 	}
 

@@ -2,11 +2,12 @@ package shared
 
 // Guest represents a guest on the invite list
 type Guest struct {
-	ID      string `json:"id"`
-	Name    string `json:"name"`
-	Address string `json:"address,omitempty"`
-	Avatar  string `json:"avatar,omitempty"`
-	Message string `json:"message,omitempty"`
+	ID       string `json:"id"`
+	Name     string `json:"name"`
+	Address  string `json:"address,omitempty"`
+	Ceremony bool   `json:"ceremony"`
+	Avatar   string `json:"avatar,omitempty"`
+	Message  string `json:"message,omitempty"`
 }
 
 // VerifyNameRequest represents a name verification request
