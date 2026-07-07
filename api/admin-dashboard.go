@@ -66,7 +66,10 @@ type DashboardDietaryEntry struct {
 	Verified bool   `json:"verified"`
 }
 
-// DashboardUnverifiedRSVP represents an RSVP from someone not on the invite list
+// DashboardUnverifiedRSVP represents an RSVP needing admin review: either
+// unverified, or verified (e.g. via the old email-link path) but containing
+// names that match no guest-list entry — those RSVPs are otherwise invisible
+// in the dashboard because all correlation is name-based.
 type DashboardUnverifiedRSVP struct {
 	Name            string   `json:"name"`
 	Email           string   `json:"email"`
@@ -74,6 +77,7 @@ type DashboardUnverifiedRSVP struct {
 	AttendingGuests []string `json:"attendingGuests"`
 	Diet            string   `json:"diet"`
 	SubmittedAt     string   `json:"submittedAt"`
+	Verified        bool     `json:"verified"`
 }
 
 // DashboardStats represents summary statistics
@@ -200,6 +204,26 @@ func buildDashboard(guests []supabaseGuest, rsvps []supabaseRSVP) DashboardRespo
 	var dietaryEntries []DashboardDietaryEntry
 	var unverifiedRSVPs []DashboardUnverifiedRSVP
 
+	// Set of canonical guest names for orphan detection
+	guestNameSet := make(map[string]bool, len(guests))
+	for _, g := range guests {
+		guestNameSet[normaliseName(g.Name)] = true
+	}
+
+	// hasOrphanNames reports whether an RSVP contains names that match no
+	// guest-list entry (attending guests for accepts, submitter for declines)
+	hasOrphanNames := func(rsvp supabaseRSVP) bool {
+		if rsvp.IsAttending {
+			for _, gName := range rsvp.AttendingGuests {
+				if !guestNameSet[normaliseName(gName)] {
+					return true
+				}
+			}
+			return false
+		}
+		return !guestNameSet[normaliseName(rsvp.Name)]
+	}
+
 	for _, rsvp := range rsvps {
 		if !rsvp.Verified {
 			unverifiedRSVPs = append(unverifiedRSVPs, DashboardUnverifiedRSVP{
@@ -207,6 +231,16 @@ func buildDashboard(guests []supabaseGuest, rsvps []supabaseRSVP) DashboardRespo
 				AttendingGuests: rsvp.AttendingGuests, Diet: rsvp.Diet, SubmittedAt: rsvp.SubmittedAt,
 			})
 			continue
+		}
+		// Verified RSVPs with unmatched names (e.g. verified via the old
+		// email link without name correction) also need review — they are
+		// otherwise dropped silently from all counts
+		if hasOrphanNames(rsvp) {
+			unverifiedRSVPs = append(unverifiedRSVPs, DashboardUnverifiedRSVP{
+				Name: rsvp.Name, Email: rsvp.Email, IsAttending: rsvp.IsAttending,
+				AttendingGuests: rsvp.AttendingGuests, Diet: rsvp.Diet, SubmittedAt: rsvp.SubmittedAt,
+				Verified: true,
+			})
 		}
 		if rsvp.IsAttending {
 			for _, gName := range rsvp.AttendingGuests {

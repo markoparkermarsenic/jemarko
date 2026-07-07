@@ -26,6 +26,9 @@
         attendingGuests: string[];
         diet: string;
         submittedAt: string;
+        // true = verified (e.g. old email-link path) but names don't match
+        // the guest list, so it needs mapping to appear in the dashboard
+        verified: boolean;
     }
 
     interface Stats {
@@ -366,7 +369,13 @@
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ action: 'verify', email: rsvp.email, name, attendingGuests })
+                body: JSON.stringify({
+                    action: 'verify',
+                    email: rsvp.email,
+                    name,
+                    attendingGuests,
+                    skipEmail: rsvp.verified // name fix only — confirmation was already sent
+                })
             });
             if (res.status === 401) {
                 view = 'login';
@@ -570,7 +579,7 @@
             {#if dashboard.stats.unverifiedCount > 0}
             <div class="stat-card stat-unverified">
                 <span class="stat-number">{dashboard.stats.unverifiedCount}</span>
-                <span class="stat-label">Unverified</span>
+                <span class="stat-label">Needs Review</span>
             </div>
             {/if}
         </section>
@@ -588,7 +597,7 @@
             {#if dashboard.unverifiedRSVPs.length > 0}
             <button class="tab-btn {activeSection === 'unverified' ? 'active' : ''}"
                 onclick={() => activeSection = 'unverified'}>
-                Unverified RSVPs
+                Needs Review
                 <span class="badge badge-warn">{dashboard.unverifiedRSVPs.length}</span>
             </button>
             {/if}
@@ -726,9 +735,10 @@
                 <p class="empty-msg">No unverified RSVPs.</p>
             {:else}
                 <p class="section-intro warn-intro">
-                    ⚠️ These RSVPs used names that don't match the guest list.
-                    Map each name to the matching guest, then verify — the RSVP
-                    will be updated to use the guest-list spelling.
+                    ⚠️ These RSVPs are unverified or use names that don't match
+                    the guest list (so they're missing from the counts). Map
+                    each name to the matching guest, then save — the RSVP will
+                    be updated to use the guest-list spelling.
                 </p>
                 <div class="unverified-list">
                     {#each dashboard.unverifiedRSVPs as rsvp (rsvp.email)}
@@ -743,7 +753,14 @@
                                     <span class="unverified-name">{rsvp.name}</span>
                                     <span class="unverified-email">{rsvp.email}</span>
                                 </div>
-                                <span class="unverified-date">{formatDate(rsvp.submittedAt)}</span>
+                                <div class="unverified-meta">
+                                    {#if rsvp.verified}
+                                        <span class="verified-badge">✓ Verified — name mismatch</span>
+                                    {:else}
+                                        <span class="unverified-badge">⚠ Unverified</span>
+                                    {/if}
+                                    <span class="unverified-date">{formatDate(rsvp.submittedAt)}</span>
+                                </div>
                             </div>
                             <div class="unverified-body">
                                 <div class="unverified-row">
@@ -817,7 +834,8 @@
                                 <button class="verify-btn"
                                     onclick={() => handleVerifyRSVP(rsvp)}
                                     disabled={verifySaving[rsvp.email]}>
-                                    {verifySaving[rsvp.email] ? 'Saving…' : '✓ Verify RSVP'}
+                                    {verifySaving[rsvp.email] ? 'Saving…'
+                                        : rsvp.verified ? '✓ Save mapping' : '✓ Verify RSVP'}
                                 </button>
                             </div>
                         </div>
@@ -1144,6 +1162,7 @@
     .unverified-name  { font-weight: 700; font-size: 1rem; display: block; }
     .unverified-email { font-size: 0.85rem; color: var(--color-text-light); display: block; }
     .unverified-date  { font-size: 0.8rem; color: var(--color-text-light); white-space: nowrap; }
+    .unverified-meta  { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
     .unverified-body  { padding: var(--spacing-md) var(--spacing-lg); display: flex; flex-direction: column; gap: var(--spacing-sm); }
     .unverified-row   { display: flex; gap: var(--spacing-md); font-size: 0.9rem; }
     .u-label { font-weight: 600; min-width: 70px; color: var(--color-text-light); }

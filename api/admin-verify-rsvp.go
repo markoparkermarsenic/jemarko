@@ -29,6 +29,7 @@ type AdminVerifyRequest struct {
 	Email           string   `json:"email"`
 	Name            string   `json:"name,omitempty"`            // corrected submitter name (optional)
 	AttendingGuests []string `json:"attendingGuests,omitempty"` // corrected attending guest names (optional)
+	SkipEmail       bool     `json:"skipEmail,omitempty"`       // true when fixing names on an already-verified RSVP
 }
 
 type AdminVerifyResponse struct {
@@ -146,6 +147,12 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		log.Printf("Admin verified RSVP for %s (guests: %v)", req.Email, rows[0].AttendingGuests)
+
+		// Already-verified RSVPs (name fixes) got their confirmation earlier
+		if req.SkipEmail {
+			avrJSON(w, http.StatusOK, true, "RSVP names updated")
+			return
+		}
 
 		// Best-effort confirmation email to the now-verified guest
 		row := rows[0]
