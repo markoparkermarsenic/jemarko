@@ -141,14 +141,15 @@
     }
 
     // Re-fetch avatars when refreshTrigger changes.
-    // Deferred to an idle callback so the fetch + render of ~100 birds
-    // doesn't block button interactivity or hydration. Buttons become
-    // active immediately; birds appear during an idle period.
+    // Deferred so hydration/button-attach completes first, but with a hard
+    // 200ms timeout: the continuous rAF loop (rafTick) keeps the browser
+    // from ever reporting "idle", so an un-timed requestIdleCallback can be
+    // starved for many seconds.
     $effect(() => {
         if (refreshTrigger <= 0) return;
         const run = () => fetchAvatars();
         if (typeof requestIdleCallback !== 'undefined') {
-            requestIdleCallback(run);
+            requestIdleCallback(run, { timeout: 200 });
         } else {
             setTimeout(run, 50);
         }
