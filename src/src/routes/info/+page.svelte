@@ -22,7 +22,7 @@
             <h2>📍 Location</h2>
 
             <div class="sub-section">
-                <h3>Ceremony</h3>
+                <h3>Ceremony: 16:00</h3>
                 <p class="venue-name">Wandsworth Town Hall</p>
                 <p class="note">
                     ⚠️ You need a <strong>specific invitation to the ceremony</strong> — this will be noted on
@@ -31,7 +31,7 @@
             </div>
 
             <div class="sub-section">
-                <h3>Reception</h3>
+                <h3>Reception: 18:00 - 23:00</h3>
                 <p class="venue-name">Sands End Arts &amp; Community Centre</p>
                 <p class="venue-address">Peterborough Rd, London SW6 3EZ</p>
                 <p class="note">Enter through Southpark on Clancarty Road.</p>
