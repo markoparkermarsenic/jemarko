@@ -38,15 +38,16 @@
         speed: number; direction: "left" | "right";
     }> = {};
 
-    // Flat snapshot used by rafTick — rebuilt in O(n) only when birds change.
+    // Flat snapshot used by rafTick — rebuilt from the DOM when stale.
     let rafBirds: Array<{ id: string; el: HTMLDivElement }> = [];
 
-    // Rebuild rafBirds by querying the DOM directly. Runs inside a $effect so
-    // it fires AFTER Svelte has flushed DOM updates — the elements are
-    // guaranteed to exist. This avoids fragile timing dependencies on
-    // use: actions or bind:this proxy behaviour.
-    $effect(() => {
-        const _ = avatars.length;
+    // Rebuild rafBirds by querying the DOM directly. Called from rafTick's
+    // self-heal check whenever the DOM child count doesn't match rafBirds.
+    // This is deliberately NOT a $effect — effects in Svelte 5.46 +
+    // vite-plugin-svelte@3 have unreliable timing. The RAF loop is the
+    // single source of truth: it runs 60fps and self-corrects within one
+    // frame if birds are added/removed.
+    function rebuildRafBirdsFromDOM() {
         if (!container) return;
         const els = container.querySelectorAll<HTMLDivElement>('.avatar[data-bird-id]');
         const next: Array<{ id: string; el: HTMLDivElement }> = [];
@@ -66,7 +67,7 @@
             next.push({ id, el });
         });
         rafBirds = next;
-    });
+    }
 
 
     // Function to fetch and merge avatars while preserving existing positions
@@ -135,6 +136,14 @@
     // Zero allocations in the hot path: no string templates, no map/filter, no
     // array spreads. At 160 birds @ 60fps this runs ~9,600 iterations/sec.
     function rafTick() {
+        // Self-heal: if the DOM has a different number of bird elements than
+        // rafBirds, rebuild from the DOM. container.children.length is O(1).
+        // This catches new birds (after fetchAvatars) and removed birds,
+        // without relying on $effect or bind:this timing.
+        if (container && container.children.length !== rafBirds.length) {
+            rebuildRafBirdsFromDOM();
+        }
+
         const W = containerWidth;
         const H = containerHeight;
         const margin = 80;
@@ -364,6 +373,7 @@
         overflow: hidden;
         z-index: 0;
         background-color: #ffffff;
+        pointer-events: none; /* Container doesn't capture clicks; only individual birds do */
     }
 
     .avatar {
@@ -374,6 +384,7 @@
         transition: transform 0.1s ease;
         z-index: 10;
         font-family: var(--font-body);
+        pointer-events: auto; /* Re-enable clicks on individual birds */
     }
 
     .avatar.has-message {
