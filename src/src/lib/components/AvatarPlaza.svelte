@@ -83,15 +83,26 @@
         try {
             const response = await getAvatars();
             if (response.success && response.avatars.length > 0) {
-                // Create a map of existing avatars by name for quick lookup
-                const existingAvatarMap = new Map(avatars.map(a => [a.name, a]));
+                // Group existing avatars by name. Names are NOT unique (e.g.
+                // two guests called "Sophie"), so each name maps to a queue of
+                // avatars that is consumed one match at a time. Matching the
+                // same existing avatar twice would produce duplicate {#each}
+                // keys — which corrupts Svelte's keyed-each effect list into a
+                // cycle (infinite reconcile loop, RangeError, OOM).
+                const existingByName = new Map<string, Avatar[]>();
+                for (const a of avatars) {
+                    const queue = existingByName.get(a.name);
+                    if (queue) queue.push(a);
+                    else existingByName.set(a.name, [a]);
+                }
                 
                 // Track which IDs survive the merge so we can clean up pos
                 const survivingIds = new Set<string>();
                 
                 // Map API avatars, preserving positions for existing ones
                 const mergedAvatars = response.avatars.map((guestAvatar: GuestAvatar, index: number) => {
-                    const existingAvatar = existingAvatarMap.get(guestAvatar.name);
+                    // Consume at most one existing avatar per API entry
+                    const existingAvatar = existingByName.get(guestAvatar.name)?.shift();
                     
                     if (existingAvatar) {
                         // Preserve existing avatar's position and movement state
@@ -104,8 +115,11 @@
                         };
                     }
                     
-                    // New avatar — initialise pos entry and create avatar record
-                    const id = `${guestAvatar.name}-${Date.now()}`;
+                    // New avatar — initialise pos entry and create avatar record.
+                    // The index guarantees uniqueness within this batch even for
+                    // duplicate names (Date.now() alone does NOT — the whole loop
+                    // runs in the same millisecond).
+                    const id = `${guestAvatar.name}-${index}-${Date.now()}`;
                     survivingIds.add(id);
                     const startX = getRandomPosition(containerWidth);
                     const startY = getRandomPosition(containerHeight);
