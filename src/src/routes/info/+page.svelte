@@ -8,7 +8,7 @@
 </svelte:head>
 
 <div class="info-page">
-    <a href="/" class="back-btn">← Back</a>
+    <a href="/" class="back-btn" data-sveltekit-reload>← Back</a>
 
     <header class="info-header">
         <img src="/j_and_m.png" alt="Jemarko" class="logo" />

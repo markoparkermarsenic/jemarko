@@ -42,8 +42,10 @@
     <!-- Avatar Plaza persists across all views - never recreated -->
     <AvatarPlaza refreshTrigger={avatarRefreshTrigger} />
     
-    <!-- Info page link - always visible -->
-    <a href="/info" class="info-btn">Info ℹ️</a>
+    <!-- Info page link - always visible. data-sveltekit-reload forces a full
+         page navigation to the prerendered static info.html, bypassing the
+         SPA router (which would fetch JS chunks and hydrate — slower). -->
+    <a href="/info" class="info-btn" data-sveltekit-reload>Info ℹ️</a>
 
     <!-- Skip to Plaza button - visible when not in plaza view -->
     {#if currentView !== "plaza-only" && !isRsvpClosed}
