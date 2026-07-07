@@ -221,6 +221,7 @@
                 dashboardError = 'Failed to load dashboard data.';
             } else {
                 dashboard = data;
+                initVerifySelections(data.unverifiedRSVPs ?? []);
             }
         } catch {
             dashboardError = 'Network error — could not load dashboard.';
@@ -290,6 +291,136 @@
             addGuestError = 'Network error — please try again.';
         }
         addGuestLoading = false;
+    }
+
+    // ── Unverified RSVP verification ──────────────────────────────────────
+    // All guests↔rsvps correlation is done by name matching, so verifying an
+    // RSVP submitted under a different name (e.g. "Mike" vs "Michael Smith")
+    // must also rewrite the names to the canonical guest-list spelling.
+
+    const allGuestNames = $derived(
+        dashboard
+            ? dashboard.guestGroups
+                .flatMap(g => g.members.map(m => m.name))
+                .sort((a, b) => a.localeCompare(b))
+            : []
+    );
+    const guestNameSet = $derived(new Set(allGuestNames.map(n => n.trim().toLowerCase())));
+
+    function isOnGuestList(name: string): boolean {
+        return guestNameSet.has(name.trim().toLowerCase());
+    }
+
+    // Best-effort suggestion for an unmatched name: exact > prefix > same
+    // first name > substring. Returns '' when nothing plausible is found.
+    function suggestGuest(name: string): string {
+        const norm = name.trim().toLowerCase();
+        if (!norm) return '';
+        const firstToken = norm.split(/\s+/)[0];
+        let best = '';
+        let bestScore = 0;
+        for (const g of allGuestNames) {
+            const gn = g.trim().toLowerCase();
+            let score = 0;
+            if (gn === norm) score = 4;
+            else if (gn.startsWith(norm) || norm.startsWith(gn)) score = 3;
+            else if (gn.split(/\s+/)[0] === firstToken) score = 2;
+            else if (gn.includes(norm) || norm.includes(gn)) score = 1;
+            if (score > bestScore) { bestScore = score; best = g; }
+        }
+        return best;
+    }
+
+    // Per-RSVP state, keyed by rsvp email
+    let verifySelections = $state<Record<string, string[]>>({});   // corrected attending guest names ('' = keep as written)
+    let verifyNameSelections = $state<Record<string, string>>({}); // corrected submitter name (not-attending RSVPs)
+    let verifySaving = $state<Record<string, boolean>>({});
+    let rejectArmed = $state<Record<string, boolean>>({});
+
+    function initVerifySelections(rsvps: UnverifiedRSVP[]) {
+        const sel: Record<string, string[]> = {};
+        const nameSel: Record<string, string> = {};
+        for (const rsvp of rsvps) {
+            sel[rsvp.email] = (rsvp.attendingGuests ?? []).map(n =>
+                isOnGuestList(n) ? '' : suggestGuest(n)
+            );
+            nameSel[rsvp.email] = isOnGuestList(rsvp.name) ? '' : suggestGuest(rsvp.name);
+        }
+        verifySelections = sel;
+        verifyNameSelections = nameSel;
+        rejectArmed = {};
+    }
+
+    async function handleVerifyRSVP(rsvp: UnverifiedRSVP) {
+        // Final names: mapped selection if chosen, otherwise as written
+        const attendingGuests = (rsvp.attendingGuests ?? []).map(
+            (orig, i) => (verifySelections[rsvp.email]?.[i] || orig).trim()
+        );
+        const name = (verifyNameSelections[rsvp.email] || rsvp.name).trim();
+
+        verifySaving = { ...verifySaving, [rsvp.email]: true };
+        try {
+            const res = await fetch('/api/admin-verify-rsvp', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ action: 'verify', email: rsvp.email, name, attendingGuests })
+            });
+            if (res.status === 401) {
+                view = 'login';
+                loginError = 'Session expired — please log in again.';
+                return;
+            }
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                showToast(data.message || 'Failed to verify RSVP.', 'error');
+            } else {
+                showToast(data.message);
+                await loadDashboard();
+            }
+        } catch {
+            showToast('Network error — could not verify RSVP.', 'error');
+        }
+        verifySaving = { ...verifySaving, [rsvp.email]: false };
+    }
+
+    async function handleRejectRSVP(rsvp: UnverifiedRSVP) {
+        // Two-click confirm: first click arms, second click deletes
+        if (!rejectArmed[rsvp.email]) {
+            rejectArmed = { ...rejectArmed, [rsvp.email]: true };
+            setTimeout(() => { rejectArmed = { ...rejectArmed, [rsvp.email]: false }; }, 4000);
+            return;
+        }
+        rejectArmed = { ...rejectArmed, [rsvp.email]: false };
+
+        verifySaving = { ...verifySaving, [rsvp.email]: true };
+        try {
+            const res = await fetch('/api/admin-verify-rsvp', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ action: 'reject', email: rsvp.email })
+            });
+            if (res.status === 401) {
+                view = 'login';
+                loginError = 'Session expired — please log in again.';
+                return;
+            }
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                showToast(data.message || 'Failed to reject RSVP.', 'error');
+            } else {
+                showToast(data.message);
+                await loadDashboard();
+            }
+        } catch {
+            showToast('Network error — could not reject RSVP.', 'error');
+        }
+        verifySaving = { ...verifySaving, [rsvp.email]: false };
     }
 </script>
 
@@ -595,10 +726,17 @@
                 <p class="empty-msg">No unverified RSVPs.</p>
             {:else}
                 <p class="section-intro warn-intro">
-                    ⚠️ These RSVPs were submitted by people not on the invite list.
+                    ⚠️ These RSVPs used names that don't match the guest list.
+                    Map each name to the matching guest, then verify — the RSVP
+                    will be updated to use the guest-list spelling.
                 </p>
                 <div class="unverified-list">
-                    {#each dashboard.unverifiedRSVPs as rsvp}
+                    {#each dashboard.unverifiedRSVPs as rsvp (rsvp.email)}
+                        {@const unresolved =
+                            (rsvp.attendingGuests ?? []).filter((g, i) =>
+                                !isOnGuestList(g) && !verifySelections[rsvp.email]?.[i]
+                            ).length
+                            + (!rsvp.isAttending && !isOnGuestList(rsvp.name) && !verifyNameSelections[rsvp.email] ? 1 : 0)}
                         <div class="unverified-card">
                             <div class="unverified-header">
                                 <div>
@@ -612,10 +750,49 @@
                                     <span class="u-label">Status:</span>
                                     <span>{rsvp.isAttending ? '✅ Attending' : '❌ Not Attending'}</span>
                                 </div>
+                                {#if !rsvp.isAttending}
+                                    <!-- For declines the submitter name is the match key -->
+                                    <div class="verify-guest-row">
+                                        <span class="verify-guest-name">{rsvp.name}</span>
+                                        {#if isOnGuestList(rsvp.name)}
+                                            <span class="match-badge match-ok">✓ on guest list</span>
+                                        {:else}
+                                            <span class="match-badge match-miss">no match</span>
+                                            <select class="guest-select"
+                                                bind:value={verifyNameSelections[rsvp.email]}
+                                                disabled={verifySaving[rsvp.email]}>
+                                                <option value="">— keep as written —</option>
+                                                {#each allGuestNames as gn}
+                                                    <option value={gn}>{gn}</option>
+                                                {/each}
+                                            </select>
+                                        {/if}
+                                    </div>
+                                {/if}
                                 {#if rsvp.attendingGuests && rsvp.attendingGuests.length > 0}
                                     <div class="unverified-row">
                                         <span class="u-label">Guests:</span>
-                                        <span>{rsvp.attendingGuests.join(', ')}</span>
+                                        <div class="verify-guest-list">
+                                            {#each rsvp.attendingGuests as gName, i}
+                                                <div class="verify-guest-row">
+                                                    <span class="verify-guest-name">{gName}</span>
+                                                    {#if isOnGuestList(gName)}
+                                                        <span class="match-badge match-ok">✓ on guest list</span>
+                                                    {:else if verifySelections[rsvp.email]}
+                                                        <span class="match-badge match-miss">no match</span>
+                                                        <span class="map-arrow">→</span>
+                                                        <select class="guest-select"
+                                                            bind:value={verifySelections[rsvp.email][i]}
+                                                            disabled={verifySaving[rsvp.email]}>
+                                                            <option value="">— keep as written —</option>
+                                                            {#each allGuestNames as gn}
+                                                                <option value={gn}>{gn}</option>
+                                                            {/each}
+                                                        </select>
+                                                    {/if}
+                                                </div>
+                                            {/each}
+                                        </div>
                                     </div>
                                 {/if}
                                 {#if rsvp.diet}
@@ -624,6 +801,24 @@
                                         <span>{rsvp.diet}</span>
                                     </div>
                                 {/if}
+                            </div>
+                            <div class="unverified-actions">
+                                {#if unresolved > 0}
+                                    <span class="verify-hint">
+                                        {unresolved} name{unresolved !== 1 ? 's' : ''} unmapped — pick a guest,
+                                        or use “Add Guest” first if they're a new invite.
+                                    </span>
+                                {/if}
+                                <button class="reject-btn {rejectArmed[rsvp.email] ? 'armed' : ''}"
+                                    onclick={() => handleRejectRSVP(rsvp)}
+                                    disabled={verifySaving[rsvp.email]}>
+                                    {rejectArmed[rsvp.email] ? 'Confirm reject?' : '✗ Reject'}
+                                </button>
+                                <button class="verify-btn"
+                                    onclick={() => handleVerifyRSVP(rsvp)}
+                                    disabled={verifySaving[rsvp.email]}>
+                                    {verifySaving[rsvp.email] ? 'Saving…' : '✓ Verify RSVP'}
+                                </button>
                             </div>
                         </div>
                     {/each}
@@ -952,6 +1147,62 @@
     .unverified-body  { padding: var(--spacing-md) var(--spacing-lg); display: flex; flex-direction: column; gap: var(--spacing-sm); }
     .unverified-row   { display: flex; gap: var(--spacing-md); font-size: 0.9rem; }
     .u-label { font-weight: 600; min-width: 70px; color: var(--color-text-light); }
+
+    /* Name mapping (verify) */
+    .verify-guest-list { display: flex; flex-direction: column; gap: var(--spacing-xs); flex: 1; }
+    .verify-guest-row  { display: flex; align-items: center; gap: var(--spacing-sm); flex-wrap: wrap; font-size: 0.9rem; }
+    .verify-guest-name { font-weight: 600; }
+    .match-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: var(--radius-full); white-space: nowrap; }
+    .match-ok    { color: #166534; background: #dcfce7; }
+    .match-miss  { color: #991b1b; background: #fee2e2; }
+    .map-arrow   { color: var(--color-text-light); }
+    .guest-select {
+        font-size: 0.85rem;
+        padding: 4px 8px;
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        background: var(--color-white);
+        max-width: 220px;
+    }
+    .guest-select:disabled { opacity: 0.6; }
+
+    /* Verify / reject actions */
+    .unverified-actions {
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: var(--spacing-sm);
+        padding: var(--spacing-sm) var(--spacing-lg);
+        border-top: 1px solid #fde68a;
+        background: #fffbeb;
+        flex-wrap: wrap;
+    }
+    .verify-hint {
+        font-size: 0.8rem;
+        color: #92400e;
+        margin-right: auto;
+    }
+    .verify-btn, .reject-btn {
+        font-size: 0.85rem;
+        font-weight: 600;
+        padding: var(--spacing-xs) var(--spacing-md);
+        border-radius: var(--radius-md);
+        cursor: pointer;
+        transition: all var(--transition-fast);
+    }
+    .verify-btn {
+        border: 2px solid #166534;
+        background: #16a34a;
+        color: var(--color-white);
+    }
+    .verify-btn:hover:not(:disabled) { opacity: 0.85; }
+    .reject-btn {
+        border: 2px solid #dc2626;
+        background: var(--color-white);
+        color: #dc2626;
+    }
+    .reject-btn:hover:not(:disabled), .reject-btn.armed { background: #dc2626; color: var(--color-white); }
+    .verify-btn:disabled, .reject-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
     /* Add Guest button */
     .add-guest-btn {

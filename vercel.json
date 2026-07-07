@@ -86,6 +86,10 @@
     {
       "source": "/api/admin-set-rsvp",
       "destination": "/api/admin-set-rsvp.go"
+    },
+    {
+      "source": "/api/admin-verify-rsvp",
+      "destination": "/api/admin-verify-rsvp.go"
     }
   ]
 }
