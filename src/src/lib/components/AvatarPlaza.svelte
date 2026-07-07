@@ -120,10 +120,17 @@
         }
     }
 
-    // Re-fetch avatars when refreshTrigger changes
+    // Re-fetch avatars when refreshTrigger changes.
+    // Deferred to an idle callback so the fetch + render of ~100 birds
+    // doesn't block button interactivity or hydration. Buttons become
+    // active immediately; birds appear during an idle period.
     $effect(() => {
-        if (refreshTrigger > 0) {
-            fetchAvatars();
+        if (refreshTrigger <= 0) return;
+        const run = () => fetchAvatars();
+        if (typeof requestIdleCallback !== 'undefined') {
+            requestIdleCallback(run);
+        } else {
+            setTimeout(run, 50);
         }
     });
 
