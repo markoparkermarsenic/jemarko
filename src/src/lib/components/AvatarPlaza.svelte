@@ -70,13 +70,24 @@
     }
 
 
+    // Guard to prevent concurrent fetchAvatars calls. Without this, if the
+    // $effect re-fires before a previous fetch completes, multiple concurrent
+    // fetches create duplicate birds with new Date.now() IDs — each spawning
+    // pos entries — causing unbounded memory growth.
+    let isFetching = false;
+
     // Function to fetch and merge avatars while preserving existing positions
     async function fetchAvatars() {
+        if (isFetching) return;
+        isFetching = true;
         try {
             const response = await getAvatars();
             if (response.success && response.avatars.length > 0) {
                 // Create a map of existing avatars by name for quick lookup
                 const existingAvatarMap = new Map(avatars.map(a => [a.name, a]));
+                
+                // Track which IDs survive the merge so we can clean up pos
+                const survivingIds = new Set<string>();
                 
                 // Map API avatars, preserving positions for existing ones
                 const mergedAvatars = response.avatars.map((guestAvatar: GuestAvatar, index: number) => {
@@ -84,6 +95,7 @@
                     
                     if (existingAvatar) {
                         // Preserve existing avatar's position and movement state
+                        survivingIds.add(existingAvatar.id);
                         return {
                             ...existingAvatar,
                             // Update data that might have changed
@@ -94,6 +106,7 @@
                     
                     // New avatar — initialise pos entry and create avatar record
                     const id = `${guestAvatar.name}-${Date.now()}`;
+                    survivingIds.add(id);
                     const startX = getRandomPosition(containerWidth);
                     const startY = getRandomPosition(containerHeight);
                     pos[id] = {
@@ -114,9 +127,16 @@
                     };
                 });
                 avatars = mergedAvatars;
+
+                // Clean up pos entries for birds that no longer exist
+                for (const id in pos) {
+                    if (!survivingIds.has(id)) delete pos[id];
+                }
             }
         } catch (error) {
             console.error('Error fetching avatars:', error);
+        } finally {
+            isFetching = false;
         }
     }
 
@@ -227,11 +247,7 @@
             const showingAvatars = avatars.filter(a => a.showMessage);
             if (showingAvatars.length > 0) {
                 const randomHideIndex = Math.floor(Math.random() * showingAvatars.length);
-                const avatarToHide = showingAvatars[randomHideIndex];
-                avatars = avatars.map((avatar) => ({
-                    ...avatar,
-                    showMessage: avatar.id === avatarToHide.id ? false : avatar.showMessage,
-                }));
+                showingAvatars[randomHideIndex].showMessage = false;
             }
             return;
         }
@@ -239,18 +255,11 @@
         // Pick a random avatar to show message
         const randomIndex = Math.floor(Math.random() * avatarsWithMessages.length);
         const avatarToShow = avatarsWithMessages[randomIndex];
-        
-        avatars = avatars.map((avatar) => ({
-            ...avatar,
-            showMessage: avatar.id === avatarToShow.id ? true : avatar.showMessage,
-        }));
+        avatarToShow.showMessage = true;
 
         // Hide this specific message after 5 seconds
         setTimeout(() => {
-            avatars = avatars.map((avatar) => ({
-                ...avatar,
-                showMessage: avatar.id === avatarToShow.id ? false : avatar.showMessage,
-            }));
+            avatarToShow.showMessage = false;
         }, 5000);
     }
 
@@ -263,10 +272,7 @@
 
         // If clicking an avatar that's already showing, hide it
         if (clickedAvatar.showMessage) {
-            avatars = avatars.map((avatar) => ({
-                ...avatar,
-                showMessage: avatar.id === avatarId ? false : avatar.showMessage,
-            }));
+            clickedAvatar.showMessage = false;
             // Check if we should resume random messages
             setTimeout(checkAndResetInteraction, 100);
             return;
@@ -279,25 +285,16 @@
         if (currentlyShowing >= MAX_VISIBLE_MESSAGES) {
             const firstShowing = avatars.find(a => a.showMessage);
             if (firstShowing) {
-                avatars = avatars.map((avatar) => ({
-                    ...avatar,
-                    showMessage: avatar.id === firstShowing.id ? false : avatar.showMessage,
-                }));
+                firstShowing.showMessage = false;
             }
         }
 
         // Show the clicked avatar's message
-        avatars = avatars.map((avatar) => ({
-            ...avatar,
-            showMessage: avatar.id === avatarId ? true : avatar.showMessage,
-        }));
+        clickedAvatar.showMessage = true;
 
         // Hide this specific message after 5 seconds
         setTimeout(() => {
-            avatars = avatars.map((avatar) => ({
-                ...avatar,
-                showMessage: avatar.id === avatarId ? false : avatar.showMessage,
-            }));
+            clickedAvatar.showMessage = false;
             // Check if we should resume random messages
             checkAndResetInteraction();
         }, 5000);
