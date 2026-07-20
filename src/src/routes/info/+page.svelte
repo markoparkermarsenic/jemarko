@@ -12,7 +12,7 @@
 
     <header class="info-header">
         <img src="/j_and_m.png" alt="Jemarko" class="logo" />
-        <h1>Wedding Info</h1>
+        <h1>August 1st 2026</h1>
     </header>
 
     <main class="info-content">
