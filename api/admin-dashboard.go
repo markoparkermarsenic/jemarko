@@ -211,8 +211,10 @@ func buildDashboard(guests []supabaseGuest, rsvps []supabaseRSVP) DashboardRespo
 	}
 
 	guestRSVPMap := make(map[string]rsvpResult)
-	var dietaryEntries []DashboardDietaryEntry
-	var unverifiedRSVPs []DashboardUnverifiedRSVP
+	// Initialise to empty (not nil) so JSON encodes [] not null — the
+	// frontend template accesses .length on these, which throws on null
+	dietaryEntries := make([]DashboardDietaryEntry, 0)
+	unverifiedRSVPs := make([]DashboardUnverifiedRSVP, 0)
 
 	// Set of canonical guest names for orphan detection
 	guestNameSet := make(map[string]bool, len(guests))
@@ -288,7 +290,7 @@ func buildDashboard(guests []supabaseGuest, rsvps []supabaseRSVP) DashboardRespo
 		groupMap[key] = append(groupMap[key], g)
 	}
 
-	var guestGroups []DashboardGuestGroup
+	guestGroups := make([]DashboardGuestGroup, 0)
 	totalInvited, attending, notAttending, noResponse := 0, 0, 0, 0
 	ceremonyAttending := 0
 

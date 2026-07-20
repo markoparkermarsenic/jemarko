@@ -590,11 +590,11 @@
             <button class="tab-btn {activeSection === 'dietary' ? 'active' : ''}"
                 onclick={() => activeSection = 'dietary'}>
                 Dietary Requirements
-                {#if dashboard.dietaryRequirements.length > 0}
-                    <span class="badge">{dashboard.dietaryRequirements.length}</span>
+            {#if (dashboard.dietaryRequirements?.length ?? 0) > 0}
+                <span class="badge">{dashboard.dietaryRequirements.length}</span>
                 {/if}
             </button>
-            {#if dashboard.unverifiedRSVPs.length > 0}
+            {#if (dashboard.unverifiedRSVPs?.length ?? 0) > 0}
             <button class="tab-btn {activeSection === 'unverified' ? 'active' : ''}"
                 onclick={() => activeSection = 'unverified'}>
                 Needs Review
@@ -694,7 +694,7 @@
 
         {:else if activeSection === 'dietary'}
         <section class="content-section">
-            {#if dashboard.dietaryRequirements.length === 0}
+            {#if (dashboard.dietaryRequirements?.length ?? 0) === 0}
                 <p class="empty-msg">No dietary requirements have been submitted yet.</p>
             {:else}
                 <p class="section-intro">
@@ -731,7 +731,7 @@
 
         {:else if activeSection === 'unverified'}
         <section class="content-section">
-            {#if dashboard.unverifiedRSVPs.length === 0}
+            {#if (dashboard.unverifiedRSVPs?.length ?? 0) === 0}
                 <p class="empty-msg">No unverified RSVPs.</p>
             {:else}
                 <p class="section-intro warn-intro">
