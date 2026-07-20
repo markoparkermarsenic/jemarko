@@ -18,6 +18,12 @@ import (
 	"utils/shared"
 )
 
+// avrClient is a self-contained HTTP client with a timeout (this file is
+// compiled independently by @vercel/go, so it cannot share declarations with
+// admin-dashboard.go). The timeout prevents a stalled Supabase response from
+// hanging the function silently until Vercel's platform timeout.
+var avrClient = &http.Client{Timeout: 9 * time.Second}
+
 // AdminVerifyRequest is the payload for verifying or rejecting an
 // unverified RSVP from the admin panel.
 //
@@ -211,7 +217,7 @@ func avrVerifyRSVP(supabaseURL, apiKey string, req AdminVerifyRequest) ([]avrRSV
 	// send the confirmation email without a second fetch
 	httpReq.Header.Set("Prefer", "return=representation")
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	resp, err := avrClient.Do(httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +241,7 @@ func avrDeleteRSVP(supabaseURL, apiKey, email string) error {
 	}
 	req.Header.Set("apikey", apiKey)
 	req.Header.Set("Authorization", "Bearer "+apiKey)
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := avrClient.Do(req)
 	if err != nil {
 		return err
 	}
